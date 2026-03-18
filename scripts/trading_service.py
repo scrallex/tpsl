@@ -110,8 +110,15 @@ class TradingService:
     def nav_metrics(self) -> Dict[str, object]:
         from scripts.trading.api_serializers import serialize_nav_metrics
 
+        tracker = None
+        coordinator = getattr(self.portfolio_manager, "coordinator", None)
+        if coordinator is not None:
+            tracker = getattr(coordinator, "exposure_tracker", None)
         return serialize_nav_metrics(
-            self.risk_manager, self.trading_active, self.kill_switch_enabled
+            self.risk_manager,
+            self.trading_active,
+            self.kill_switch_enabled,
+            tracker=tracker,
         )
 
     def gate_metrics(self) -> Dict[str, object]:

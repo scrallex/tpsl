@@ -16,6 +16,7 @@ def serialize_nav_metrics(
     risk_manager: Any,
     trading_active: bool,
     kill_switch_enabled: bool,
+    tracker: Any = None,
 ) -> Dict[str, Any]:
     """Serializes the current NAV and risk summary into a REST-friendly dictionary.
 
@@ -36,6 +37,39 @@ def serialize_nav_metrics(
     }
     show_positions = trading_active and not kill_switch_enabled and not read_only
     positions = risk_manager.position_breakdown() if show_positions else []
+    if show_positions:
+        enriched_positions = []
+        total_tickets = 0
+        for position in positions:
+            instrument = str(position.get("instrument") or "").upper()
+            raw_tickets = []
+            if tracker is not None and hasattr(tracker, "get_tickets"):
+                try:
+                    raw_tickets = list(tracker.get_tickets(instrument) or [])
+                except Exception:
+                    raw_tickets = []
+            ticket_payloads = []
+            for ticket in raw_tickets:
+                ticket_payloads.append(
+                    {
+                        "units": int(getattr(ticket, "units", 0) or 0),
+                        "entry_price": float(getattr(ticket, "entry_price", 0.0) or 0.0),
+                        "entry_time": getattr(ticket, "entry_time", None).isoformat()
+                        if getattr(ticket, "entry_time", None) is not None
+                        else None,
+                    }
+                )
+            total_tickets += len(ticket_payloads)
+            enriched_positions.append(
+                {
+                    **position,
+                    "ticket_count": len(ticket_payloads),
+                    "tickets": ticket_payloads,
+                }
+            )
+        positions = enriched_positions
+    else:
+        total_tickets = 0
 
     if not show_positions:
         summary["total_units"] = 0.0
@@ -44,6 +78,7 @@ def serialize_nav_metrics(
     summary.update(
         {
             "positions": positions,
+            "active_ticket_count": total_tickets,
             "kill_switch": kill_switch_enabled,
             "trading_active": trading_active,
             "timestamp": datetime.now(timezone.utc).isoformat(),

@@ -75,12 +75,19 @@ interface PositionEntry {
   instrument: string;
   net_units: number;
   exposure: number;
+  ticket_count?: number;
+  tickets?: Array<{
+    units: number;
+    entry_price: number;
+    entry_time?: string | null;
+  }>;
 }
 
 interface NavSummary {
   nav_snapshot?: number;
   total_units?: number;
   exposure_usd?: number;
+  active_ticket_count?: number;
   positions?: PositionEntry[];
   kill_switch?: boolean;
   trading_active?: boolean;
@@ -711,7 +718,7 @@ export default function LiveConsole() {
             <h2 className="panel__title">Open Positions</h2>
             <span className="panel__timestamp">
               {navSummary?.positions && navSummary.positions.length
-                ? `${navSummary.positions.length} instrument${navSummary.positions.length === 1 ? "" : "s"}`
+                ? `${navSummary.active_ticket_count ?? 0} ticket${(navSummary.active_ticket_count ?? 0) === 1 ? "" : "s"} across ${navSummary.positions.length} instrument${navSummary.positions.length === 1 ? "" : "s"}`
                 : "No active positions"}
             </span>
           </header>
@@ -720,8 +727,10 @@ export default function LiveConsole() {
               <thead>
                 <tr>
                   <th scope="col">Instrument</th>
+                  <th scope="col" className="right">Tickets</th>
                   <th scope="col" className="right">Units</th>
                   <th scope="col" className="right">Exposure</th>
+                  <th scope="col" className="right">Ticket Units</th>
                 </tr>
               </thead>
               <tbody>
@@ -729,13 +738,19 @@ export default function LiveConsole() {
                   navSummary.positions.map((position) => (
                     <tr key={position.instrument}>
                       <th scope="row">{position.instrument}</th>
+                      <td className="right">{formatInteger(position.ticket_count ?? 0)}</td>
                       <td className="right">{formatInteger(position.net_units)}</td>
                       <td className="right">{formatCurrency(position.exposure, { compact: true })}</td>
+                      <td className="right">
+                        {position.tickets && position.tickets.length > 0
+                          ? position.tickets.map((ticket) => formatInteger(ticket.units)).join(" / ")
+                          : "—"}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className="empty-cell">
+                    <td colSpan={5} className="empty-cell">
                       No open positions
                     </td>
                   </tr>

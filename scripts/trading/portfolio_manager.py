@@ -354,8 +354,12 @@ class PortfolioLoopCoordinator:
         notional_caps = self.risk_sizer.compute_notional_caps(
             nav_snapshot, exposure_scale=self.exposure_scale
         )
+        per_pair_stack_cap = (
+            notional_caps.per_position_cap
+            * max(1, int(self.risk_manager.limits.max_positions_per_pair))
+        )
         self.risk_manager.configure_dynamic_limits(
-            max_position_size=notional_caps.per_position_cap,
+            max_position_size=per_pair_stack_cap,
             max_total_exposure=notional_caps.portfolio_cap,
             max_total_positions=min(
                 max(1, int(self.risk_manager.limits.max_total_positions)),

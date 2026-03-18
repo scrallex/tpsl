@@ -438,12 +438,41 @@ class TPSLBacktestSimulator:
         tpsl_config: TPSLConfig,
     ) -> Tuple[TPSLPositionTracker, List[Tuple[datetime, float]]]:
         tracker = TPSLPositionTracker(cost_bps=self.cost_bps)
-        risk_manager = RiskManager(RiskLimits())
+        max_positions_per_pair = max(
+            1, int(os.getenv("RISK_MAX_POSITIONS_PER_PAIR", "5") or 5)
+        )
+        alloc_top_k = max(
+            1,
+            int(
+                os.getenv(
+                    "PM_ALLOC_TOP_K",
+                    os.getenv("ALLOC_TOP_K", os.getenv("RISK_MAX_TOTAL_POSITIONS", "32")),
+                )
+                or 32
+            ),
+        )
+        risk_manager = RiskManager(
+            RiskLimits(
+                max_positions_per_pair=max_positions_per_pair,
+                max_total_positions=alloc_top_k,
+            )
+        )
         risk_manager.set_nav(self.nav)
         risk_sizer = RiskSizer(
             nav_risk_pct=self.nav_risk_pct,
             per_position_pct_cap=self.per_position_pct_cap,
-            alloc_top_k=1,
+            alloc_top_k=alloc_top_k,
+        )
+        notional_caps = risk_sizer.compute_notional_caps(
+            self.nav,
+            exposure_scale=params.exposure_scale,
+        )
+        risk_manager.configure_dynamic_limits(
+            max_position_size=(
+                notional_caps.per_position_cap * float(max_positions_per_pair)
+            ),
+            max_total_exposure=notional_caps.portfolio_cap,
+            max_total_positions=alloc_top_k,
         )
         trade_state = TradeStateStore()
         trade_planner = TradePlanner(trade_state)
