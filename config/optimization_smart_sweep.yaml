@@ -1,0 +1,120 @@
+# SEP Smart Optimization Sweep Configuration
+# "Patient Sniper" Strategy Focused
+# Removes unproductive search zones (Hold < 45m, Reps < 3)
+# Maximizes resolution in profitable zones (Hold 45-180m, Reps 3-6)
+
+# ============================================================================
+# Gate Evaluation Parameters (Global Smart Defaults)
+# ============================================================================
+gate_parameters:
+  # Hazard: Focused on quality threshold (0.9-1.2)
+  hazard_multiplier: [0.9, 1.0, 1.1, 1.2]
+
+  # Repetitions: STRICT (> 2) to eliminate false positives
+  min_repetitions: [3, 4, 5, 6]
+
+  # Hold Time: PATIENT (> 45m) to capture structural trends
+  # Testing extended ranges up to 3 hours
+  hold_minutes: [45, 60, 90, 105, 120, 150, 180]
+
+  # Exposure: Standard scaling
+  exposure_scale: [0.015, 0.02, 0.025]
+
+# ============================================================================
+# TP/SL Parameters (Volatility Adaptive)
+# ============================================================================
+tpsl_parameters:
+  # Stop Loss: Slightly wider to accommodate longer hold times
+  # Avoiding tight stops that get wick-hunted
+  stop_loss_pct: [0.003, 0.004, 0.005, 0.006, 0.008]
+
+  # Take Profit: Higher targets for better R:R on trends
+  take_profit_pct: [0.006, 0.008, 0.010, 0.015, 0.020]
+
+  # Trailing: Optional but potentially powerful for 180m holds
+  trailing_stop_pct: [null, 0.004, 0.005, 0.006]
+  breakeven_trigger_pct: [null, 0.004, 0.005, 0.006]
+
+# ============================================================================
+# Instrument Specific "Smart Overrides"
+# ============================================================================
+instrument_overrides:
+  # 1. USD_JPY (Proven Winner)
+  # Lock in success zone, test slight variations
+  USD_JPY:
+    gate_parameters:
+      min_repetitions: [3, 4, 5, 6]
+      hold_minutes: [90, 105, 120, 150] # Push higher?
+      hazard_multiplier: [0.9, 1.0, 1.1]
+
+  # 2. AUD_USD (Proven Winner)
+  # Lock in success zone
+  AUD_USD:
+    gate_parameters:
+      min_repetitions: [3, 4, 5]
+      hold_minutes: [40, 45, 60, 90]
+      hazard_multiplier: [0.9, 1.0, 1.1]
+
+  # 3. GBP_USD (Proven Winner)
+  # Lock in success zone
+  GBP_USD:
+    gate_parameters:
+      min_repetitions: [1, 3, 4, 5, 6]
+      hold_minutes: [60, 90, 120]
+
+  # 4. EUR_USD (The Challenge)
+  # Apply "Patient Sniper" template aggressively
+  EUR_USD:
+    gate_parameters:
+      min_repetitions: [1, 2, 3, 4, 5, 6] # Explore full repetition spectrum
+      hold_minutes: [60, 90, 120, 150, 180] # Force long trend capture
+      hazard_multiplier: [0.9, 1.0, 1.1]
+
+  # 5. USD_CAD (The Commodity Twin)
+  # Hybrid of AUD (Reactivity) and JPY (Trend)
+  USD_CAD:
+    gate_parameters:
+      min_repetitions: [3, 4, 5]
+      hold_minutes: [45, 60, 90, 120]
+
+  # 6. USD_CHF (The Safe Haven)
+  # Treat like EUR but often slower
+  USD_CHF:
+    gate_parameters:
+      min_repetitions: [4, 5, 6]
+      hold_minutes: [60, 90, 120, 150]
+
+# ============================================================================
+# Constraints & Risk
+# ============================================================================
+risk_parameters:
+  nav_risk_pct: [0.01, 0.015, 0.02]
+  max_position_size: [50000, 75000, 100000]
+
+strategy_parameters:
+  min_regime_confidence: [0.0, 0.5, 0.7] # Test if regime filter adds value
+  guard_coherence_min: [0.0, 0.1, 0.2]
+
+constraints:
+  min_risk_reward_ratio: 1.0 # Relaxes
+  max_exposure_per_instrument: 0.10
+  min_trades_for_qualification: 2 # Lower slightly for 180m holds (fewer signals)
+  max_drawdown_threshold: 0.20
+  min_profit_factor: 0.5
+  min_sharpe_ratio: -10.0
+
+# ============================================================================
+# Optimization Phases
+# ============================================================================
+optimization_phases:
+  sampling:
+    method: "latin_hypercube"
+    max_combinations: 5000 # High density in "Smart" zone
+    focus: "performance"
+
+scoring_weights:
+  profit_factor: 0.35
+  sharpe_ratio: 0.30
+  max_drawdown_inverse: 0.20
+  win_rate: 0.10
+  avg_trade_duration_inverse: 0.05

@@ -1,0 +1,14 @@
+{
+  "enabled_pairs": [
+    "AUD_JPY",
+    "AUD_USD",
+    "EUR_AUD",
+    "EUR_CHF",
+    "EUR_GBP",
+    "EUR_USD",
+    "GBP_JPY",
+    "GBP_USD",
+    "NZD_USD",
+    "USD_CHF"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "instrument_strategies": {
+    "EUR_USD": "Trend Sniper (MB003)",
+    "NZD_USD": "Hybrid Protocol",
+    "USD_CHF": "Hybrid Protocol",
+    "AUD_USD": "Hybrid Protocol",
+    "USD_JPY": "Mean Reversion (NB001)"
+  }
+}

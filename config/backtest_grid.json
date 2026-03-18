@@ -1,0 +1,44 @@
+{
+  "default": {
+    "hazard_multiplier": [0.8, 1.0, 1.2],
+    "min_repetitions": [1, 2],
+    "hold_minutes": [20, 30, 45],
+    "exposure_scale": [0.015, 0.02, 0.03]
+  },
+  "EUR_USD": {
+    "hazard_multiplier": [0.7, 0.9, 1.0, 1.1],
+    "min_repetitions": [1, 2],
+    "hold_minutes": [30, 45],
+    "exposure_scale": [0.015, 0.02]
+  },
+  "USD_JPY": {
+    "hazard_multiplier": [0.8, 1.0, 1.2],
+    "min_repetitions": [1, 2, 3],
+    "hold_minutes": [20, 30],
+    "exposure_scale": [0.01, 0.015]
+  },
+  "GBP_USD": {
+    "hazard_multiplier": [0.8, 1.0, 1.2],
+    "min_repetitions": [1, 2],
+    "hold_minutes": [30, 40],
+    "exposure_scale": [0.02]
+  },
+  "AUD_USD": {
+    "hazard_multiplier": [0.9, 1.0, 1.1],
+    "min_repetitions": [1, 2],
+    "hold_minutes": [20, 30],
+    "exposure_scale": [0.02, 0.03]
+  },
+  "USD_CHF": {
+    "hazard_multiplier": [0.8, 1.0, 1.2],
+    "min_repetitions": [2, 3],
+    "hold_minutes": [15, 25],
+    "exposure_scale": [0.015, 0.02]
+  },
+  "USD_CAD": {
+    "hazard_multiplier": [0.8, 1.0, 1.2],
+    "min_repetitions": [1, 2, 3],
+    "hold_minutes": [15, 30],
+    "exposure_scale": [0.02]
+  }
+}

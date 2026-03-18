@@ -1,0 +1,128 @@
+# SEP Grand Unified Parameter Optimization Space
+# Comprehensive configuration for overnight sweep of all 6 majors.
+# Applies "Patient Sniper" logic (JPY) and "Hidden Gem" logic (AUD).
+
+# ============================================================================
+# Gate Evaluation Parameters (Global Defaults)
+# ============================================================================
+gate_parameters:
+  # Shifted towards higher hazard for meaningful signals
+  hazard_multiplier: [0.8, 0.9, 1.0, 1.1, 1.2]
+
+  # Shifted towards higher repetitions to filter noise (Global baseline)
+  min_repetitions: [2, 3, 4, 5]
+
+  # Shifted towards longer holds to capture trends (Global baseline)
+  hold_minutes: [30, 45, 60, 90, 120]
+
+  # Standard exposure
+  exposure_scale: [0.015, 0.02, 0.025]
+
+# ============================================================================
+# TP/SL Parameters (Global Defaults)
+# ============================================================================
+tpsl_parameters:
+  # Wide range to find instrument-specific volatility fit
+  stop_loss_pct: [0.002, 0.003, 0.004, 0.005, 0.006]
+  take_profit_pct: [0.004, 0.006, 0.008, 0.010, 0.015, 0.020]
+
+  # Optional trailing
+  trailing_stop_pct: [null, 0.003, 0.005]
+  breakeven_trigger_pct: [null, 0.003, 0.005]
+
+# ============================================================================
+# Risk & Strategy (Global Defaults)
+# ============================================================================
+risk_parameters:
+  nav_risk_pct: [0.01, 0.015, 0.02]
+  max_position_size: [50000, 75000, 100000]
+
+strategy_parameters:
+  min_regime_confidence: [0.0, 0.4, 0.55, 0.7]
+  guard_coherence_min: [0.0, 0.1, 0.15, 0.2]
+  guard_stability_min: [0.0, 0.05, 0.1, 0.15]
+  guard_entropy_max: [2.0, 2.3, 2.5, 3.0]
+
+# ============================================================================
+# Instrument-Specific Overrides
+# ============================================================================
+instrument_overrides:
+  # 1. USD_JPY: The "Patient Sniper" (Proven)
+  USD_JPY:
+    gate_parameters:
+      min_repetitions: [4, 5, 6] # Strict entry for noise filtering
+      hold_minutes: [90, 120] # Long holds for trend capture
+      hazard_multiplier: [0.9, 1.0, 1.1]
+    tpsl_parameters:
+      stop_loss_pct: [0.001, 0.002, 0.003]
+      take_profit_pct: [0.004, 0.006, 0.008]
+
+  # 2. AUD_USD: The "Hidden Gem" (Proven)
+  AUD_USD:
+    gate_parameters:
+      min_repetitions: [3, 4] # Validated range
+      hold_minutes: [30, 40, 60] # Validated range
+      hazard_multiplier: [0.9, 1.0, 1.1]
+    tpsl_parameters:
+      stop_loss_pct: [0.004, 0.005, 0.006]
+      take_profit_pct: [0.008, 0.010, 0.012]
+
+  # 3. EUR_USD: High Liquidity Trend/Reversion Hybrid
+  EUR_USD:
+    gate_parameters:
+      min_repetitions: [3, 4, 5]
+      hold_minutes: [30, 45, 60, 90]
+      hazard_multiplier: [0.8, 1.0, 1.2]
+    tpsl_parameters:
+      stop_loss_pct: [0.002, 0.003, 0.004]
+      take_profit_pct: [0.004, 0.006, 0.008]
+
+  # 4. GBP_USD: Volatile Trend
+  GBP_USD:
+    gate_parameters:
+      min_repetitions: [3, 4, 5]
+      # GBP often needs room to breathe
+      stop_loss_pct: [0.003, 0.004, 0.005, 0.006]
+
+  # 5. USD_CAD: Commodity/Trend (Treat similar to AUD)
+  USD_CAD:
+    gate_parameters:
+      min_repetitions: [3, 4]
+      hold_minutes: [30, 45, 60]
+    tpsl_parameters:
+      stop_loss_pct: [0.003, 0.004, 0.005]
+
+  # 6. USD_CHF: Safe Haven / Choppy (Treat similar to EUR but lower vol)
+  USD_CHF:
+    gate_parameters:
+      min_repetitions: [3, 4, 5]
+      hold_minutes: [30, 45, 60]
+    tpsl_parameters:
+      stop_loss_pct: [0.002, 0.003, 0.004]
+
+# ============================================================================
+# Constraints
+# ============================================================================
+constraints:
+  min_risk_reward_ratio: 1.5
+  max_exposure_per_instrument: 0.05
+  min_trades_for_qualification: 30
+  max_drawdown_threshold: 0.10
+  min_profit_factor: 1.15
+  min_sharpe_ratio: 0.5
+
+# ============================================================================
+# Optimization Phases
+# ============================================================================
+optimization_phases:
+  sampling:
+    method: "latin_hypercube"
+    max_combinations: 5000
+    focus: "diversity"
+
+scoring_weights:
+  profit_factor: 0.35
+  sharpe_ratio: 0.30
+  max_drawdown_inverse: 0.20
+  win_rate: 0.10
+  avg_trade_duration_inverse: 0.05

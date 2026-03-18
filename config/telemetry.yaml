@@ -1,0 +1,37 @@
+# Example telemetry optimizer configuration
+sample_interval_s: 1.0
+burst_interval_s: 0.2
+burst_duration_s: 10.0
+window_size: 32
+history_size: 512
+ndjson_path: logs/telemetry
+driver: nvml
+autotune_enabled: false
+
+rigs:
+  RIG01:
+    source: nvml
+    miner_api:
+      kind: trex
+      url: http://127.0.0.1:4067/summary
+      timeout: 1.0
+    miner_type: nvidia_3080ti
+    pool: demo_pool
+    location: home_lab
+    psu_model: corsair_ax1200
+    ambient_c: 24.0
+    temp_throttle_c: 84.0
+    device_index: 0
+    thresholds:
+      sep_score_min: 70.0
+      reject_rate_max: 0.02
+      power_step_w: 5.0
+      clock_step_mhz: 15.0
+      fan_step_pct: 10.0
+      rupture_cooldown_s: 600
+      power_limit_min_w: 260.0
+      power_limit_max_w: 340.0
+      clock_core_offset_min_mhz: -150.0
+      clock_core_offset_max_mhz: 150.0
+      fan_percent_min: 30.0
+      fan_percent_max: 90.0

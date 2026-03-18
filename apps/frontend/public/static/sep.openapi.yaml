@@ -1,0 +1,353 @@
+openapi: 3.0.3
+info:
+  title: SEP Trading API
+  version: 1.0.0
+  description: Minimal surface used by the SEP frontend
+servers:
+  - url: https://mxbikes.xyz
+    description: Production
+paths:
+  /api/pairs:
+    get:
+      summary: Enabled trading instruments
+      operationId: getPairs
+      responses:
+        '200':
+          description: List of instruments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pairs:
+                    type: array
+                    items:
+                      type: string
+  /api/coherence/status:
+    get:
+      summary: Latest coherence metrics for an instrument
+      operationId: getCoherenceStatus
+      parameters:
+        - in: query
+          name: instrument
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: points
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Coherence metrics payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoherenceStatus'
+  /api/kill-switch:
+    get:
+      summary: Kill switch status
+      operationId: getKillSwitch
+      responses:
+        '200':
+          description: Kill switch state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kill_switch:
+                    type: boolean
+    post:
+      summary: Toggle kill switch
+      operationId: setKillSwitch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated status
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/trading/mode:
+    get:
+      summary: Trading mode and OANDA environment
+      operationId: getTradingMode
+      responses:
+        '200':
+          description: Trading mode information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradingMode'
+  /api/oanda/account:
+    get:
+      summary: OANDA account summary
+      operationId: getOandaAccount
+      responses:
+        '200':
+          description: Account info
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/oanda/positions:
+    get:
+      summary: Open OANDA positions
+      operationId: getOandaPositions
+      responses:
+        '200':
+          description: Positions payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/oanda/open-trades:
+    get:
+      summary: Open trades
+      operationId: getOandaOpenTrades
+      responses:
+        '200':
+          description: Open trades payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/oanda/pricing:
+    get:
+      summary: Latest bid/ask pricing
+      operationId: getOandaPricing
+      parameters:
+        - in: query
+          name: instruments
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pricing payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/market-data:
+    get:
+      summary: Historical market data window
+      operationId: getMarketData
+      parameters:
+        - in: query
+          name: instrument
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: granularity
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Candle payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candles:
+                    type: array
+                    items:
+                      type: object
+  /api/risk/allocation-status:
+    get:
+      summary: Current portfolio allocation weights
+      operationId: getAllocationStatus
+      responses:
+        '200':
+          description: Allocation weights
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  weights:
+                    type: object
+                    additionalProperties:
+                      type: number
+  /api/ranking/active:
+    get:
+      summary: Session-aware ranking of instruments
+      operationId: getActiveRanking
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Ranking payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActiveRanking'
+  /api/manifold/coeffs:
+    get:
+      summary: Latest manifold coefficients for an instrument
+      operationId: getManifoldCoeffs
+      parameters:
+        - in: query
+          name: instrument
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Coefficients payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/candles:
+    get:
+      summary: Candle priming endpoint
+      operationId: getCandles
+      parameters:
+        - in: query
+          name: instrument
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: granularity
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Candle payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+  /api/authenticity:
+    get:
+      summary: Authenticity diagnostics by instrument
+      operationId: getAuthenticity
+      parameters:
+        - in: query
+          name: instruments
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authenticity summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instruments:
+                    type: array
+                    items:
+                      type: object
+components:
+  schemas:
+    CoherenceStatus:
+      type: object
+      properties:
+        instrument:
+          type: string
+        ts_ms:
+          type: integer
+          format: int64
+        coherence:
+          type: number
+        stability:
+          type: number
+        entropy:
+          type: number
+        rupture:
+          type: number
+        metrics:
+          type: object
+          additionalProperties: true
+    TradingMode:
+      type: object
+      properties:
+        practice_trading_enabled:
+          type: boolean
+        auto_trading_enabled:
+          type: boolean
+        environment:
+          type: string
+    ActiveRanking:
+      type: object
+      properties:
+        now_ms:
+          type: integer
+          format: int64
+        sessions:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              instrument:
+                type: string
+              is_open:
+                type: boolean
+              near_close:
+                type: boolean
+              score:
+                type: number
+              flow_m5:
+                type: integer
+              coherence:
+                type: number
+              stability:
+                type: number
+              entropy:
+                type: number
+              hazard:
+                type: number
+                nullable: true
+              repetitions:
+                type: integer
+              admit:
+                type: integer
+              direction:
+                type: string
+              gate_source:
+                type: string
+              regime_min_reps:
+                type: integer
+              regime_hazard_max:
+                type: number

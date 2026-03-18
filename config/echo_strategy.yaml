@@ -1,0 +1,91 @@
+global:
+  direction: momentum
+  min_repetitions: 3
+  hazard_max: 0.35
+  hazard_exit_threshold: 0.60
+  exit_horizon: 40
+  session_exit_minutes: 5
+  margin_hyst_high: 0.30
+  regime_filter: []
+  min_regime_confidence: 0.0
+  guard_thresholds:
+    min_coherence: 0.0
+    min_stability: 0.0
+    max_entropy: 4.0
+    max_coherence_tau_slope: 1.0
+    max_domain_wall_slope: 1.0
+    min_low_freq_share: 0.0
+    max_reynolds_ratio: 100.0
+    min_temporal_half_life: 0.0
+    min_spatial_corr_length: 0.0
+    min_pinned_alignment: 0.0
+instruments:
+  EUR_USD:
+    session:
+      start: "00:00Z"
+      end: "23:59Z"
+    hazard_max: 0.6
+    min_repetitions: 1
+    guards: {}
+    exit:
+      exit_horizon: 40
+      hold_rearm: true
+      max_hold_minutes: 40
+  USD_CHF:
+    session:
+      start: "00:00Z"
+      end: "23:59Z"
+    hazard_max: 0.6
+    min_repetitions: 1
+    guards: {}
+    exit:
+      exit_horizon: 20
+      hold_rearm: true
+      max_hold_minutes: 20
+  AUD_USD:
+    session:
+      start: "00:00Z"
+      end: "23:59Z"
+    hazard_max: 0.6
+    min_repetitions: 1
+    guards: {}
+    exit:
+      exit_horizon: 40
+      hold_rearm: true
+      max_hold_minutes: 40
+  USD_JPY:
+    session:
+      start: "00:00Z"
+      end: "23:59Z"
+    hazard_max: 0.6
+    min_repetitions: 1
+    guards: {}
+    exit:
+      exit_horizon: 30
+      hold_rearm: true
+      max_hold_minutes: 30
+  NZD_USD:
+    session:
+      start: "00:00Z"
+      end: "23:59Z"
+    hazard_max: 0.6
+    min_repetitions: 1
+    guards: {}
+    exit:
+      exit_horizon: 20
+      hold_rearm: true
+      max_hold_minutes: 20
+      max_hold_minutes: 20
+bundles:
+  MB003:
+    enabled: true
+    min_score: 0.0
+    exposure_multiplier: 1.0
+    hold_minutes: 360
+  NB001:
+    enabled: true
+    min_score: 0.0
+    exposure_multiplier: 0.75
+    hold_minutes: 360
+  CB002:
+    enabled: false

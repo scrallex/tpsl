@@ -1,0 +1,12 @@
+{
+  "default": 0.0001,
+  "instruments": {
+    "USD_JPY": 0.01,
+    "EUR_JPY": 0.01,
+    "GBP_JPY": 0.01,
+    "AUD_JPY": 0.01,
+    "NZD_JPY": 0.01,
+    "CAD_JPY": 0.01,
+    "CHF_JPY": 0.01
+  }
+}

@@ -1,0 +1,29 @@
+{
+    "strategy": "V8_Golden_Matrix",
+    "pairs": {
+        "EUR_USD": {
+            "c_drift_min": 0.6,
+            "e_pct_max": 0.1,
+            "v_tick_pct_min": 0.85,
+            "db_min": 1
+        },
+        "GBP_USD": {
+            "c_drift_min": 0.65,
+            "e_pct_max": 0.15,
+            "v_tick_pct_min": 0.95,
+            "db_min": 1
+        },
+        "AUD_USD": {
+            "c_drift_min": 0.65,
+            "e_pct_max": 0.1,
+            "v_tick_pct_min": 0.92,
+            "db_min": 1
+        },
+        "USD_JPY": {
+            "c_drift_min": 0.7,
+            "e_pct_max": 0.2,
+            "v_tick_pct_min": 0.92,
+            "db_min": 1
+        }
+    }
+}

@@ -1,0 +1,36 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies for the Python services and native manifold module
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libtbb12 \
+        g++ \
+        nlohmann-json3-dev \
+        libtbb-dev \
+    || apt-get install -y --no-install-recommends ca-certificates curl libtbb2 g++ nlohmann-json3-dev libtbb-dev; \
+    update-ca-certificates; \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code and compile manifold_engine C++ module
+COPY scripts/ ./scripts/
+COPY config/ ./config/
+COPY src/ ./src/
+RUN sh /app/scripts/tools/build_manifold_engine.sh
+
+# Create necessary directories
+RUN mkdir -p logs data output
+
+# Set Python to run in unbuffered mode
+ENV PYTHONUNBUFFERED=1
+
+# Default command (can be overridden in docker-compose)
+CMD ["python3", "scripts/trading_service.py"]

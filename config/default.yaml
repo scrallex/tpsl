@@ -1,0 +1,21 @@
+# SEP Engine Configuration
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+database:
+  # Use remote Valkey server by default
+  redis_host: "private-sep-db-do-user-18540873-0.j.db.ondigitalocean.com"
+  redis_port: 25061
+  redis_ssl: true
+  redis_user: "default"
+  redis_password: "AVNS_2WzwWacxF_N8UxxZavH"
+  redis_url: "rediss://default:AVNS_2WzwWacxF_N8UxxZavH@private-sep-db-do-user-18540873-0.j.db.ondigitalocean.com:25061"
+
+quantum:
+  max_patterns: 10000
+  coherence_threshold: 0.7
+
+logging:
+  level: "INFO"
+  file: "/app/logs/sep.log"
