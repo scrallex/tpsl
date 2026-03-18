@@ -16,6 +16,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 SIGNAL_TYPE="${SIGNAL_TYPE:-mean_reversion}"
 MAX_COMBINATIONS="${MAX_COMBINATIONS:-500000}"
 MIN_TRADES="${MIN_TRADES:-10}"
+MAX_TRADES="${MAX_TRADES:-300}"
 USE_REGIME="${USE_REGIME:-1}"
 # Keep the baseline live profile aligned with the structural backtest unless ML is
 # explicitly requested for a dedicated export/evaluation pass.
@@ -121,6 +122,7 @@ run_window_sweep() {
         --max_combinations "$MAX_COMBINATIONS"
         --lookback-days "$days"
         --min-trades "$MIN_TRADES"
+        --max-trades "$MAX_TRADES"
         --output-file "$params_rel"
     )
     if [[ "$USE_REGIME" == "1" ]]; then
