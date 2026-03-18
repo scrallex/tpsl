@@ -23,11 +23,11 @@ services:
       STRATEGY_PROFILE: /app/config/mean_reversion_strategy.yaml
       LIVE_ENABLE_ML_GATE: "0"
       EXPOSURE_SCALE: "0.02"
-      PORTFOLIO_NAV_RISK_PCT: "0.02"
-      PM_MAX_PER_POS_PCT: "0.02"
-      PM_ALLOC_TOP_K: "35"
-      ALLOC_TOP_K: "35"
-      RISK_MAX_TOTAL_POSITIONS: "35"
+      PORTFOLIO_NAV_RISK_PCT: "0.01"
+      PM_MAX_PER_POS_PCT: "0.01"
+      PM_ALLOC_TOP_K: "32"
+      ALLOC_TOP_K: "32"
+      RISK_MAX_TOTAL_POSITIONS: "32"
       RISK_MAX_POSITIONS_PER_PAIR: "5"
       RISK_MAX_NET_UNITS_PER_PAIR: "40000"
       SIGNAL_EVIDENCE_PATH: /app/output/evidence/outcome_weekly_costs.json

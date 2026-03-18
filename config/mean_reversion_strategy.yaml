@@ -30,21 +30,21 @@ instruments:
     allow_fallback: false
     ml_primary_gate: false
     regime_filter: []
-    hazard_min: 0.88476
+    hazard_min: 0.85214
     hazard_max: null
     min_repetitions: 1
-    stop_loss_pct: 0.005
-    take_profit_pct: 0.0087
+    stop_loss_pct: 0.00326
+    take_profit_pct: 0.00776
     trailing_stop_pct: null
-    breakeven_trigger_pct: 0.00169
+    breakeven_trigger_pct: 0.00218
     guards:
-      min_coherence: 0.16634
-      max_entropy: 1.2074
+      min_coherence: 0.1727
+      max_entropy: 1.5497
       min_stability: 0.0
     exit:
       exit_horizon: 40
       hold_rearm: true
-      max_hold_minutes: 1427
+      max_hold_minutes: 641
   GBP_USD:
     session:
       start: 00:00Z
@@ -53,113 +53,21 @@ instruments:
     allow_fallback: false
     ml_primary_gate: false
     regime_filter: []
-    hazard_min: 0.86634
+    hazard_min: 0.76779
     hazard_max: null
     min_repetitions: 1
-    stop_loss_pct: 0.00531
-    take_profit_pct: 0.00536
+    stop_loss_pct: 0.00315
+    take_profit_pct: 0.00198
     trailing_stop_pct: null
-    breakeven_trigger_pct: 0.00243
+    breakeven_trigger_pct: 0.00248
     guards:
-      min_coherence: 0.17164
-      max_entropy: 1.0908
+      min_coherence: 0.20281
+      max_entropy: 2.02079
       min_stability: 0.0
     exit:
       exit_horizon: 40
       hold_rearm: true
-      max_hold_minutes: 3512
-  NZD_USD:
-    session:
-      start: 00:00Z
-      end: 23:59Z
-    invert_bundles: true
-    allow_fallback: false
-    ml_primary_gate: false
-    regime_filter: []
-    hazard_min: 0.88961
-    hazard_max: null
-    min_repetitions: 1
-    stop_loss_pct: 0.00625
-    take_profit_pct: 0.00329
-    trailing_stop_pct: null
-    breakeven_trigger_pct: 0.00233
-    guards:
-      min_coherence: 0.14791
-      max_entropy: 1.02257
-      min_stability: 0.0
-    exit:
-      exit_horizon: 40
-      hold_rearm: true
-      max_hold_minutes: 3960
-  AUD_USD:
-    session:
-      start: 00:00Z
-      end: 23:59Z
-    invert_bundles: true
-    allow_fallback: false
-    ml_primary_gate: false
-    regime_filter: []
-    hazard_min: 0.82046
-    hazard_max: null
-    min_repetitions: 1
-    stop_loss_pct: 0.00766
-    take_profit_pct: 0.00662
-    trailing_stop_pct: null
-    breakeven_trigger_pct: 0.00235
-    guards:
-      min_coherence: 0.1769
-      max_entropy: 2.05693
-      min_stability: 0.0
-    exit:
-      exit_horizon: 40
-      hold_rearm: true
-      max_hold_minutes: 3388
-  USD_CHF:
-    session:
-      start: 00:00Z
-      end: 23:59Z
-    invert_bundles: true
-    allow_fallback: false
-    ml_primary_gate: false
-    regime_filter: []
-    hazard_min: 0.91025
-    hazard_max: null
-    min_repetitions: 1
-    stop_loss_pct: 0.00583
-    take_profit_pct: 0.00824
-    trailing_stop_pct: null
-    breakeven_trigger_pct: 0.0025
-    guards:
-      min_coherence: 0.06478
-      max_entropy: 1.35938
-      min_stability: 0.0
-    exit:
-      exit_horizon: 40
-      hold_rearm: true
-      max_hold_minutes: 3266
-  USD_CAD:
-    session:
-      start: 00:00Z
-      end: 23:59Z
-    invert_bundles: true
-    allow_fallback: false
-    ml_primary_gate: false
-    regime_filter: []
-    hazard_min: 0.87927
-    hazard_max: null
-    min_repetitions: 1
-    stop_loss_pct: 0.00202
-    take_profit_pct: 0.00495
-    trailing_stop_pct: null
-    breakeven_trigger_pct: 0.00229
-    guards:
-      min_coherence: 0.16168
-      max_entropy: 1.27293
-      min_stability: 0.0
-    exit:
-      exit_horizon: 40
-      hold_rearm: true
-      max_hold_minutes: 3848
+      max_hold_minutes: 2774
   USD_JPY:
     session:
       start: 00:00Z
@@ -168,18 +76,110 @@ instruments:
     allow_fallback: false
     ml_primary_gate: false
     regime_filter: []
-    hazard_min: 0.82428
+    hazard_min: 0.79783
     hazard_max: null
     min_repetitions: 1
-    stop_loss_pct: 0.00668
-    take_profit_pct: 0.00946
+    stop_loss_pct: 0.00453
+    take_profit_pct: 0.00249
     trailing_stop_pct: null
-    breakeven_trigger_pct: 0.00171
+    breakeven_trigger_pct: 0.00223
     guards:
-      min_coherence: 0.17377
-      max_entropy: 1.37586
+      min_coherence: 0.0661
+      max_entropy: 2.22205
       min_stability: 0.0
     exit:
       exit_horizon: 40
       hold_rearm: true
-      max_hold_minutes: 2044
+      max_hold_minutes: 1439
+  AUD_USD:
+    session:
+      start: 00:00Z
+      end: 23:59Z
+    invert_bundles: true
+    allow_fallback: false
+    ml_primary_gate: false
+    regime_filter: []
+    hazard_min: 0.62042
+    hazard_max: null
+    min_repetitions: 1
+    stop_loss_pct: 0.00529
+    take_profit_pct: 0.0068
+    trailing_stop_pct: null
+    breakeven_trigger_pct: 0.00227
+    guards:
+      min_coherence: 0.11143
+      max_entropy: 0.90558
+      min_stability: 0.0
+    exit:
+      exit_horizon: 40
+      hold_rearm: true
+      max_hold_minutes: 3142
+  USD_CHF:
+    session:
+      start: 00:00Z
+      end: 23:59Z
+    invert_bundles: true
+    allow_fallback: false
+    ml_primary_gate: false
+    regime_filter: []
+    hazard_min: 0.93195
+    hazard_max: null
+    min_repetitions: 1
+    stop_loss_pct: 0.00584
+    take_profit_pct: 0.00296
+    trailing_stop_pct: null
+    breakeven_trigger_pct: 0.00242
+    guards:
+      min_coherence: 0.09963
+      max_entropy: 1.98336
+      min_stability: 0.0
+    exit:
+      exit_horizon: 40
+      hold_rearm: true
+      max_hold_minutes: 3753
+  USD_CAD:
+    session:
+      start: 00:00Z
+      end: 23:59Z
+    invert_bundles: true
+    allow_fallback: false
+    ml_primary_gate: false
+    regime_filter: []
+    hazard_min: 0.75
+    hazard_max: null
+    min_repetitions: 1
+    stop_loss_pct: 0.00494
+    take_profit_pct: 0.00574
+    trailing_stop_pct: null
+    breakeven_trigger_pct: 0.00202
+    guards:
+      min_coherence: 0.18355
+      max_entropy: 0.82761
+      min_stability: 0.0
+    exit:
+      exit_horizon: 40
+      hold_rearm: true
+      max_hold_minutes: 2340
+  NZD_USD:
+    session:
+      start: 00:00Z
+      end: 23:59Z
+    invert_bundles: true
+    allow_fallback: false
+    ml_primary_gate: false
+    regime_filter: []
+    hazard_min: 0.9002
+    hazard_max: null
+    min_repetitions: 1
+    stop_loss_pct: 0.00542
+    take_profit_pct: 0.0037
+    trailing_stop_pct: null
+    breakeven_trigger_pct: 0.0025
+    guards:
+      min_coherence: 0.17471
+      max_entropy: 1.80582
+      min_stability: 0.0
+    exit:
+      exit_horizon: 40
+      hold_rearm: true
+      max_hold_minutes: 935
