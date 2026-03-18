@@ -27,6 +27,13 @@ def _api_base() -> str:
     )
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 from scripts.trading.retry_utils import with_retry
 
 
@@ -165,13 +172,19 @@ class OandaConnector:
                 "positionFill": "DEFAULT",
             }
         }
-        if stop_loss is not None:
-            body["order"]["stopLossOnFill"] = {
-                "price": f"{float(stop_loss):.{precision}f}",
-                "timeInForce": "GTC",
-            }
-        if take_profit is not None:
-            body["order"]["takeProfitOnFill"] = {"price": f"{float(take_profit):.{precision}f}"}
+        # Backtest parity is local-engine-owned TP/SL management. Broker-side
+        # brackets are opt-in so OANDA cannot close trades behind the live
+        # tracker and leave stale local inventory.
+        if _env_flag("OANDA_ATTACH_BRACKET_ORDERS", default=False):
+            if stop_loss is not None:
+                body["order"]["stopLossOnFill"] = {
+                    "price": f"{float(stop_loss):.{precision}f}",
+                    "timeInForce": "GTC",
+                }
+            if take_profit is not None:
+                body["order"]["takeProfitOnFill"] = {
+                    "price": f"{float(take_profit):.{precision}f}"
+                }
         return self._request(
             "POST", f"/v3/accounts/{self.account_id}/orders", json_body=body
         )
@@ -181,6 +194,24 @@ class OandaConnector:
             self._request("GET", f"/v3/accounts/{self.account_id}/positions") or {}
         )
         return payload.get("positions", []) or []
+
+    def open_trades(
+        self, instruments: Optional[Iterable[str]] = None
+    ) -> List[Dict[str, Any]]:
+        payload = (
+            self._request("GET", f"/v3/accounts/{self.account_id}/openTrades") or {}
+        )
+        trades = payload.get("trades", []) or []
+        if instruments is None:
+            return trades
+        wanted = {str(inst).upper() for inst in instruments if str(inst).strip()}
+        if not wanted:
+            return trades
+        return [
+            trade
+            for trade in trades
+            if str(trade.get("instrument") or "").upper() in wanted
+        ]
 
     def account(self) -> Dict[str, Any]:
         payload = self._request("GET", f"/v3/accounts/{self.account_id}") or {}
@@ -334,6 +365,13 @@ def positions(trading_service: Any) -> List[Dict[str, Any]]:
     return connector.positions() if connector else []
 
 
+def open_trades(
+    trading_service: Any, instruments: Optional[Iterable[str]] = None
+) -> List[Dict[str, Any]]:
+    connector = getattr(trading_service, "oanda", None)
+    return connector.open_trades(instruments) if connector else []
+
+
 def account_info(trading_service: Any) -> Dict[str, Any]:
     connector = getattr(trading_service, "oanda", None)
     payload = connector.account() if connector else {}
@@ -349,6 +387,7 @@ __all__ = [
     "fetch_and_store_candles",
     "fetch_candles_for_enabled_pairs",
     "get_stored_candles",
+    "open_trades",
     "positions",
     "pricing",
     "submit_market_order",

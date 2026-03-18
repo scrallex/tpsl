@@ -18,14 +18,14 @@ warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 
 usage() {
     cat <<'EOF'
-Usage: ./deploy.sh [--stack <full|live|hotband>] [--compose <file>] [--help]
+Usage: ./deploy.sh [--stack <live|full>] [--compose <file>] [--help]
 
 Defaults:
-  --stack full    Deploy backend + streamer + regime + frontend.
+  --stack live    Deploy the canonical droplet stack.
 
 Examples:
   ./deploy.sh
-  ./deploy.sh --stack live
+  ./deploy.sh --stack full
   ./deploy.sh --compose docker-compose.live.yml
 EOF
 }
@@ -86,7 +86,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$MODE" ]]; then
-    MODE="${SEP_DEPLOY_STACK:-full}"
+    MODE="${SEP_DEPLOY_STACK:-live}"
 fi
 
 if [[ -z "$COMPOSE_FILE" ]]; then

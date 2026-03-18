@@ -489,6 +489,11 @@ class TradingService:
     def get_oanda_positions(self) -> List[Dict[str, object]]:
         return oanda_service.positions(self)
 
+    def get_oanda_open_trades(
+        self, instruments: Optional[Iterable[str]] = None
+    ) -> List[Dict[str, object]]:
+        return oanda_service.open_trades(self, instruments)
+
     def get_oanda_account_info(self) -> Dict[str, object]:
         return oanda_service.account_info(self)
 
@@ -551,13 +556,13 @@ class TradingService:
         elif self.read_only and self.kill_switch_enabled:
             logger.info("READ_ONLY mode active; kill switch engaged")
         self.running = True
-        self.portfolio_manager.start()
         try:
             self.portfolio_manager.reconcile_portfolio()
         except (ValueError, TypeError, RuntimeError):
             logger.warning(
                 "Portfolio reconciliation failed during startup", exc_info=True
             )
+        self.portfolio_manager.start()
         self._sync_trading_state()
         if start_api:
             host = os.getenv("HTTP_HOST", "0.0.0.0")

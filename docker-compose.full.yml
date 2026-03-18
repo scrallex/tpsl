@@ -30,6 +30,9 @@ services:
       RISK_MAX_TOTAL_POSITIONS: "32"
       RISK_MAX_POSITIONS_PER_PAIR: "5"
       RISK_MAX_NET_UNITS_PER_PAIR: "40000"
+      PORTFOLIO_RECONCILE_SECONDS: "30"
+      TRADE_ENTRY_COOLDOWN_SECONDS: "60"
+      OANDA_ATTACH_BRACKET_ORDERS: "0"
       SIGNAL_EVIDENCE_PATH: /app/output/evidence/outcome_weekly_costs.json
       ROC_REGIME_SUMMARY_PATH: /app/output/evidence/roc_regime_summary.json
       PYTHONPATH: /app

@@ -4,9 +4,8 @@ Signal-first FX trading system for OANDA majors.
 
 ## Architecture
 
-- `docker-compose.live.yml`: live droplet stack with `valkey`, `backend`, and `streamer`.
-- `docker-compose.full.yml`: local/dev stack with `regime` and `frontend` added back.
-- `docker-compose.hotband.yml`: legacy alias for the full stack.
+- `docker-compose.live.yml`: canonical droplet stack with `valkey`, `backend`, `regime`, `frontend`, and `streamer`.
+- `docker-compose.full.yml`: compatibility alias for the same stack during local/dev work.
 - `scripts/trading_service.py`: live backend entrypoint.
 - `scripts/tools/stream_candles.py`: OANDA candle ingest into Valkey.
 - `scripts/research/gpu_optimizer.py`: GPU-node optimizer and backtest workflow.
@@ -29,7 +28,7 @@ scripts/research/       GPU-node research and optimizer stack
 src/core/               Native manifold engine sources
 apps/frontend/          Optional dashboard
 docker-compose.live.yml Live deployment stack
-docker-compose.full.yml Full local stack
+docker-compose.full.yml Compatibility alias
 deploy.sh               Droplet deployment entrypoint
 ```
 
@@ -154,7 +153,7 @@ make push-config TARGET=http://127.0.0.1:8000/api/strategy/update
 
 ## Deployment
 
-`deploy.sh` now defaults to the live stack and runs `make parity-check` before building containers.
+`deploy.sh` now defaults to the canonical live stack and runs `make parity-check` before building containers.
 
 Droplet deploy:
 
@@ -162,7 +161,7 @@ Droplet deploy:
 SEP_NODE_ROLE=droplet ./deploy.sh
 ```
 
-Explicit full-stack deploy:
+Compatibility alias:
 
 ```bash
 SEP_NODE_ROLE=droplet SEP_DEPLOY_STACK=full ./deploy.sh

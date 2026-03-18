@@ -37,6 +37,17 @@ class TradeStackProcessor:
         self.execution_engine = execution_engine
         self.hold_seconds = hold_seconds
         self.exposure_scale = float(os.getenv("EXPOSURE_SCALE", "0.02") or 0.02)
+        self.entry_cooldown_secs = max(
+            0, int(os.getenv("TRADE_ENTRY_COOLDOWN_SECONDS", "60") or 60)
+        )
+        self._last_entry_ts: Dict[str, float] = {}
+
+    def restore_entry_cooldown(self, instrument: str, entry_ts: float) -> None:
+        if entry_ts > 0:
+            self._last_entry_ts[instrument.upper()] = float(entry_ts)
+
+    def clear_entry_cooldown(self, instrument: str) -> None:
+        self._last_entry_ts.pop(instrument.upper(), None)
 
     def process_instrument(
         self,
@@ -64,8 +75,10 @@ class TradeStackProcessor:
             tracker: Exposure/ticket tracker that also executes broker deltas.
         """
         now = datetime.now(timezone.utc)
+        now_ts = time.time()
         current_units = self.risk_manager.net_units(instrument)
         has_position = current_units != 0 or self.trade_state.has_trades(instrument)
+        prior_trade_count = self.trade_state.trade_count(instrument)
 
         decision = self.session_policy.evaluate(instrument, now, has_position)
         profile = self.strategy.get(instrument)
@@ -82,6 +95,20 @@ class TradeStackProcessor:
             hard_blocks.append(decision.reason)
         if not admitted:
             gate_reasons.append("gate_blocked")
+
+        cooldown_active = False
+        last_entry_ts = float(self._last_entry_ts.get(instrument.upper(), 0.0) or 0.0)
+        if (
+            self.entry_cooldown_secs > 0
+            and last_entry_ts > 0.0
+            and (now_ts - last_entry_ts) < float(self.entry_cooldown_secs)
+        ):
+            cooldown_active = True
+            admitted = False
+            if "global_cooldown" not in gate_reasons:
+                gate_reasons.append("global_cooldown")
+            if "cooldown_active" not in gate_reasons:
+                gate_reasons.append("cooldown_active")
 
         # Phase 9: Global Risk Lock
         # Check if the portfolio is overexposed to USD-correlated risk.
@@ -205,7 +232,7 @@ class TradeStackProcessor:
 
         self.execution_engine.execute_allocation(
             instrument=instrument,
-            now_ts=time.time(),
+            now_ts=now_ts,
             gate_entry_ready=admitted and decision.tradable,
             gate_reasons=gate_reasons,
             direction=direction,
@@ -222,6 +249,9 @@ class TradeStackProcessor:
             stop_loss_price=stop_loss_price,
             take_profit_price=take_profit_price,
         )
+
+        if self.trade_state.trade_count(instrument) > prior_trade_count:
+            self._last_entry_ts[instrument.upper()] = now_ts
 
     def _direction_to_side(self, direction: Optional[str]) -> int:
         if direction == "BUY":

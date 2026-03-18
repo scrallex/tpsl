@@ -206,6 +206,9 @@ dashboards/
 docs/
 sep_historical_gates/
 tests/
+!tests/
+tests/*
+!tests/test_live_alignment.py
 configs/research/
 
 # Allow committed testbed scenarios

@@ -1,5 +1,6 @@
 .dashboard {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 48px 24px 72px;
   background: radial-gradient(circle at top, rgba(79,70,229,0.18), transparent 55%);
   display: flex;

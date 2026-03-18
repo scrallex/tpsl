@@ -21,7 +21,7 @@ from .gate_loader import (
 from .exposure_tracker import ExposureTracker
 from .trade_stack import TradeStackProcessor
 from .risk_limits import RiskManager
-from .trade_state import TradeStateStore
+from .trade_state import ActiveTrade, TradeStateStore
 from .risk_calculator import RiskSizer
 from .execution_engine import ExecutionEngine
 from .session_policy import SessionPolicy
@@ -441,7 +441,50 @@ class PortfolioLoopCoordinator:
         return {key: dict(value) for key, value in self._last_gate_payloads.items()}
 
     def reconcile_portfolio(self) -> None:
-        self.exposure_tracker.reconcile_portfolio()
+        broker_trades = self.exposure_tracker.reconcile_portfolio(
+            self.enabled_instruments
+        )
+        gate_payloads = self.gate_loader.load(self.enabled_instruments)
+        now_ts = time.time()
+
+        for instrument in self.enabled_instruments:
+            trades = list(broker_trades.get(instrument, []))
+            if not trades:
+                self.trade_state.remove_trades(instrument)
+                self.trade_stack.clear_entry_cooldown(instrument)
+                continue
+
+            profile = self.strategy.get(instrument)
+            hold_secs = self.config.hold_seconds
+            if profile and profile.hold_minutes is not None:
+                hold_secs = max(60, int(profile.hold_minutes) * 60)
+
+            rebuilt: List[ActiveTrade] = []
+            latest_entry_ts = 0.0
+            for trade in trades:
+                entry_ts = float(trade.entry_time.timestamp())
+                latest_entry_ts = max(latest_entry_ts, entry_ts)
+                rebuilt.append(
+                    ActiveTrade(
+                        direction=1 if int(trade.units) > 0 else -1,
+                        units=abs(int(trade.units)),
+                        entry_ts=entry_ts,
+                        hold_secs=hold_secs,
+                        max_hold_secs=None,
+                        elapsed_secs=max(0, int(now_ts - entry_ts)),
+                        entry_price=float(trade.entry_price),
+                    )
+                )
+
+            self.trade_state.replace_trades(instrument, rebuilt)
+            self.trade_state.clear_pending_close(instrument)
+            self.trade_stack.restore_entry_cooldown(instrument, latest_entry_ts)
+
+            gate_ts = int((gate_payloads.get(instrument, {}) or {}).get("ts_ms") or 0)
+            if gate_ts > 0:
+                self.trade_state.set_last_signal(instrument, f"gate:{gate_ts}")
+            else:
+                self.trade_state.clear_last_signal(instrument)
 
 
 class PortfolioManager(threading.Thread):

@@ -34,8 +34,21 @@ body,
   background-color: var(--bg-primary);
   color: var(--text-main);
   font-family: var(--font-body);
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body {
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  min-height: 100%;
 }
 
 /* Premium Panel Glassmorphism */

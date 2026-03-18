@@ -42,6 +42,14 @@ class TPSLPositionTracker:
     def get_tickets(self, instrument: str) -> List[ActiveTicket]:
         return self._tickets.get(instrument.upper(), [])
 
+    def replace_tickets(self, instrument: str, tickets: List[ActiveTicket]) -> None:
+        inst = instrument.upper()
+        normalized = [ticket for ticket in tickets if int(ticket.units or 0) != 0]
+        if normalized:
+            self._tickets[inst] = normalized
+        else:
+            self._tickets.pop(inst, None)
+
     def open_position(
         self,
         instrument: str,
