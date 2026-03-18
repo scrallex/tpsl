@@ -16,6 +16,20 @@ error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 
+usage() {
+    cat <<'EOF'
+Usage: ./deploy.sh [--stack <full|live|hotband>] [--compose <file>] [--help]
+
+Defaults:
+  --stack full    Deploy backend + streamer + regime + frontend.
+
+Examples:
+  ./deploy.sh
+  ./deploy.sh --stack live
+  ./deploy.sh --compose docker-compose.live.yml
+EOF
+}
+
 require_droplet_role() {
     local node_role="${SEP_NODE_ROLE:-unknown}"
     local override="${SEP_ALLOW_NON_DROPLET_DEPLOY:-0}"
@@ -36,8 +50,51 @@ require_droplet_role() {
 
 # Configuration
 PROJECT_NAME="sep"
-MODE="${SEP_DEPLOY_STACK:-live}"
-COMPOSE_FILE="docker-compose.${MODE}.yml"
+MODE=""
+COMPOSE_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --stack)
+            if [[ $# -lt 2 ]]; then
+                error "--stack requires a value"
+                usage
+                exit 1
+            fi
+            MODE="$2"
+            shift 2
+            ;;
+        --compose)
+            if [[ $# -lt 2 ]]; then
+                error "--compose requires a file path"
+                usage
+                exit 1
+            fi
+            COMPOSE_FILE="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            error "Unknown argument: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$MODE" ]]; then
+    MODE="${SEP_DEPLOY_STACK:-full}"
+fi
+
+if [[ -z "$COMPOSE_FILE" ]]; then
+    COMPOSE_FILE="docker-compose.${MODE}.yml"
+elif [[ -z "${SEP_DEPLOY_STACK:-}" ]]; then
+    MODE="$(basename "$COMPOSE_FILE" .yml)"
+    MODE="${MODE#docker-compose.}"
+fi
 
 # Load non-secret environment files in order of precedence
 load_base_env() {
@@ -104,6 +161,11 @@ load_oanda_env
 compose_has_service() {
     $DOCKER_COMPOSE -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -Fxq "$1"
 }
+
+if ! compose_has_service frontend; then
+    warning "Frontend service is not part of $COMPOSE_FILE"
+    warning "Use ./deploy.sh --stack full if you need the dashboard, kill switch UI, and NAV monitor."
+fi
 
 run_parity_checks() {
     local params_path="${PARAMS_PATH:-output/live_params.json}"
