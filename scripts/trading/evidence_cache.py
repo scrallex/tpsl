@@ -12,14 +12,14 @@ class EvidenceTracker:
 
     def __init__(self) -> None:
         self.signal_evidence_path = Path(
-            os.getenv("SIGNAL_EVIDENCE_PATH", "docs/evidence/outcome_weekly_costs.json")
+            os.getenv("SIGNAL_EVIDENCE_PATH", "output/evidence/outcome_weekly_costs.json")
         )
         self._signal_evidence_cache: Optional[Dict[str, Any]] = None
         self._signal_evidence_mtime: Optional[float] = None
 
         self.roc_summary_path = Path(
             os.getenv(
-                "ROC_REGIME_SUMMARY_PATH", "docs/evidence/roc_regime_summary.json"
+                "ROC_REGIME_SUMMARY_PATH", "output/evidence/roc_regime_summary.json"
             )
         )
         self._roc_summary_cache: Optional[Dict[str, Any]] = None

@@ -11,6 +11,10 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 DEFAULT_BACKTEST_NAV = 100000
+LIVE_PARAMS_CANDIDATES = (
+    Path("output/live_params.json"),
+    Path("config/live_params.json"),
+)
 
 
 def compute_week_range() -> Tuple[datetime, datetime]:
@@ -20,6 +24,13 @@ def compute_week_range() -> Tuple[datetime, datetime]:
 
 def load_grid_config(path: Any) -> Dict[str, Any]:
     return {}
+
+
+def resolve_live_params_path() -> Optional[Path]:
+    for candidate in LIVE_PARAMS_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return None
 
 
 class BacktestManager:
@@ -188,14 +199,19 @@ class BacktestManager:
             cost_bps = float(os.getenv("BACKTEST_COST_BPS", "1.5") or 1.5)
             granularity = os.getenv("BACKTEST_GRANULARITY", "S5") or "S5"
 
-            from scripts.research.simulator.backtest_simulator import (
-                TPSLBacktestSimulator,
-            )
-            from scripts.research.simulator.models import TPSLSimulationParams
+            try:
+                from scripts.research.simulator.backtest_simulator import (
+                    TPSLBacktestSimulator,
+                )
+                from scripts.research.simulator.models import TPSLSimulationParams
+            except ImportError as exc:
+                raise RuntimeError(
+                    "backtest_runtime_unavailable: scripts/research is not available in this environment"
+                ) from exc
 
             live_params = {}
-            params_file = Path("output/live_params.json")
-            if params_file.exists():
+            params_file = resolve_live_params_path()
+            if params_file is not None:
                 try:
                     live_params = json.loads(params_file.read_text())
                 except (json.JSONDecodeError, OSError):
@@ -255,6 +271,23 @@ class BacktestManager:
                 }
         except Exception as exc:
             logger.exception("Backtest grid failed")
+            try:
+                self.backtest_error_path.parent.mkdir(parents=True, exist_ok=True)
+                self.backtest_error_path.write_text(
+                    json.dumps(
+                        {
+                            "error": str(exc),
+                            "window": {
+                                "start": start.isoformat(),
+                                "end": end.isoformat(),
+                            },
+                            "job_id": job_id,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            except OSError:
+                logger.debug("Failed to persist backtest error payload", exc_info=True)
             with self._backtest_lock:
                 self._backtest_status = {
                     "state": "error",

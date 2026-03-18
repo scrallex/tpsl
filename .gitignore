@@ -160,7 +160,7 @@ OANDA.env
 config/secrets/
 
 # Docker
-.dockerignore
+!.dockerignore
 
 # Git
 *.orig
@@ -201,6 +201,12 @@ local/
 dev/
 scratch/
 frontend_legacy/
+.agent/
+dashboards/
+docs/
+sep_historical_gates/
+tests/
+configs/research/
 
 # Allow committed testbed scenarios
 !_sep/

@@ -27,7 +27,7 @@ COPY src/ ./src/
 RUN sh /app/scripts/tools/build_manifold_engine.sh
 
 # Create necessary directories
-RUN mkdir -p logs data output
+RUN mkdir -p logs data output/backtests output/evidence
 
 # Set Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1

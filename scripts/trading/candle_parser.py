@@ -1,8 +1,9 @@
 """Dedicated module for parsing JSON objects into Candle elements."""
 
 from typing import Any, Mapping, Optional
-from scripts.research.regime_manifold.types import Candle
+
 from scripts.trading.candle_utils import to_epoch_ms
+from scripts.trading.market_types import Candle
 
 
 def _coerce_float(value: Any) -> float:

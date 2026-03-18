@@ -14,7 +14,7 @@ The frontend is a lightweight monitor mapping directly to backend read-only endp
 
 - `HealthMonitor`: Displays connectivity statuses (OANDA API, Valkey memory limits, Gate staleness) pulled from `health_check_service.py`.
 - `GateStream`: The live scrolling window of `MarketManifoldEncoder` outputs.
-- `WeeklyOutcomePanel`: Renders the `docs/evidence/outcome_weekly_costs.json` file to validate live simulation alignment vs. historical backtests.
+- `WeeklyOutcomePanel`: Renders the `output/evidence/outcome_weekly_costs.json` artifact to validate live simulation alignment vs. historical backtests.
 
 ## Setup Instructions
 

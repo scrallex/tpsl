@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
-from scripts.research.regime_manifold.types import Candle
+from scripts.trading.market_types import Candle
 
 
 def to_epoch_ms(value: Any) -> int:

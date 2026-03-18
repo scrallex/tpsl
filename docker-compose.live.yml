@@ -35,7 +35,6 @@ services:
       PYTHONPATH: /app
     volumes:
       - ./scripts:/app/scripts:ro
-      - ./scripts/research:/app/scripts/research:ro
       - ./config:/app/config:ro
       - ./output:/app/output
       - ./logs/backend:/app/logs
@@ -44,54 +43,6 @@ services:
     ports:
       - "8000:8000"
     command: ["python3", "/app/scripts/trading_service.py"]
-
-  regime:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    container_name: sep-regime
-    restart: unless-stopped
-    env_file:
-      - .env.hotband
-      - OANDA.env
-    environment:
-      VALKEY_URL: "${VALKEY_URL:-redis://valkey:6379/0}"
-      STRATEGY_PROFILE: /app/config/mean_reversion_strategy.yaml
-      HOTBAND_PAIRS: "${HOTBAND_PAIRS:-EUR_USD,USD_JPY,AUD_USD,USD_CHF,NZD_USD,GBP_USD,USD_CAD}"
-      REGIME_PROM_PORT: "${REGIME_PROM_PORT:-9105}"
-      REGIME_WINDOW_CANDLES: "${REGIME_WINDOW_CANDLES:-16}"
-      REGIME_STRIDE_CANDLES: "${REGIME_STRIDE_CANDLES:-1}"
-      REGIME_LOOP_SECONDS: "${REGIME_LOOP_SECONDS:-2.0}"
-      PYTHONPATH: /app
-    volumes:
-      - ./scripts:/app/scripts:ro
-      - ./scripts/research:/app/scripts/research:ro
-      - ./config:/app/config:ro
-      - ./logs/backend:/app/logs
-    depends_on:
-      - valkey
-    ports:
-      - "9105:9105"
-    command: ["python3", "/app/scripts/trading/regime_manifold_service.py"]
-
-  frontend:
-    build:
-      context: ./apps/frontend
-    container_name: sep-frontend
-    restart: unless-stopped
-    environment:
-      API_URL: "https://mxbikes.xyz"
-      SERVER_NAME: "mxbikes.xyz"
-      BACKEND_UPSTREAM: "http://backend:8000"
-      WS_UPSTREAM: "http://backend:8000"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /var/www/certbot:/var/www/certbot:ro
-    depends_on:
-      - backend
 
   streamer:
     build:

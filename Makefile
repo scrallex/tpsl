@@ -1,4 +1,4 @@
-.PHONY: install frontend-install frontend-build start lint clean build-manifold-engine unified-backtest strategy-yaml strategy-audit strategy-fingerprint push-config export-optimal-trades
+.PHONY: install frontend-install frontend-build start lint clean build-manifold-engine unified-backtest strategy-yaml strategy-audit strategy-fingerprint parity-check push-config export-optimal-trades deploy-live
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -6,7 +6,7 @@ PIP_FLAGS ?= --no-cache-dir
 PIP_BREAK_FLAG ?= --break-system-packages
 LINT_PATHS ?= scripts/trading scripts/research scripts/tools scripts/trading_service.py
 
-CONFIG ?= configs/research/semantic_pilot.json
+CONFIG ?= config/optimization_smart_sweep.yaml
 PARAMS_PATH ?= output/live_params.json
 STRATEGY_PATH ?= config/mean_reversion_strategy.yaml
 SIGNAL_TYPE ?= mean_reversion
@@ -55,5 +55,10 @@ strategy-fingerprint:
 	@sha256sum $(STRATEGY_PATH)
 	@if [ -f "$(PARAMS_PATH)" ]; then sha256sum "$(PARAMS_PATH)"; fi
 
+parity-check: strategy-audit strategy-fingerprint
+
 push-config:
 	@$(PYTHON) scripts/tools/push_config.py --payload $(PARAMS_PATH) --target $(TARGET) --signal-type $(SIGNAL_TYPE)
+
+deploy-live:
+	@SEP_DEPLOY_STACK=live ./deploy.sh

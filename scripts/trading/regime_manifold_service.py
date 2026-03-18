@@ -21,9 +21,9 @@ from prometheus_client import Counter, Gauge, Summary, start_http_server
 from scripts.research.regime_manifold.encoder import (
     MarketManifoldEncoder as MarketManifoldCodec,
 )
-from scripts.research.regime_manifold.types import Candle
 from scripts.trading.candle_utils import to_epoch_ms
 from scripts.trading.candle_parser import candle_from_payload
+from scripts.trading.market_types import Candle
 from scripts.trading.portfolio_manager import StrategyProfile
 
 logger = logging.getLogger("regime-manifold-service")

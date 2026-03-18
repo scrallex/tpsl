@@ -36,7 +36,7 @@ require_droplet_role() {
 
 # Configuration
 PROJECT_NAME="sep"
-MODE="${SEP_DEPLOY_STACK:-hotband}"
+MODE="${SEP_DEPLOY_STACK:-live}"
 COMPOSE_FILE="docker-compose.${MODE}.yml"
 
 # Load non-secret environment files in order of precedence
@@ -101,6 +101,22 @@ log "Docker compose command: $DOCKER_COMPOSE"
 
 load_oanda_env
 
+compose_has_service() {
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" config --services 2>/dev/null | grep -Fxq "$1"
+}
+
+run_parity_checks() {
+    local params_path="${PARAMS_PATH:-output/live_params.json}"
+    if [[ -f "$params_path" ]]; then
+        log "Running strategy parity checks with $params_path..."
+        make parity-check PARAMS_PATH="$params_path"
+        return 0
+    fi
+
+    warning "No params artifact found at $params_path; skipping strategy audit"
+    make strategy-fingerprint PARAMS_PATH="$params_path"
+}
+
 # Validate required OANDA credentials
 if [[ -n "${OANDA_API_KEY:-}" ]]; then
     oanda_key_state="set"
@@ -140,6 +156,8 @@ export HOTBAND_PAIRS
 
 log "HOTBAND_PAIRS: $HOTBAND_PAIRS"
 
+run_parity_checks
+
 # Stop existing services
 log "Stopping existing services..."
 $DOCKER_COMPOSE -f "$COMPOSE_FILE" down --remove-orphans || true
@@ -169,7 +187,6 @@ sleep 20
 # Health check function
 health_check() {
     local backend_url="http://localhost:8000"
-    local frontend_url="http://localhost/health"
     
     log "Checking backend health at $backend_url/health..."
     if curl -sf "$backend_url/health" >/dev/null 2>&1; then
@@ -179,14 +196,20 @@ health_check() {
         return 1
     fi
 
-    log "Checking frontend health at $frontend_url..."
-    if curl -sf "$frontend_url" >/dev/null 2>&1; then
-        success "Frontend health check passed"
-        return 0
-    else
-        error "Frontend health check failed"
-        return 1
+    if compose_has_service frontend; then
+        local frontend_url="http://localhost/health"
+        log "Checking frontend health at $frontend_url..."
+        if curl -sf "$frontend_url" >/dev/null 2>&1; then
+            success "Frontend health check passed"
+            return 0
+        else
+            error "Frontend health check failed"
+            return 1
+        fi
     fi
+
+    log "Frontend service not present in this compose stack; skipping frontend health check"
+    return 0
 }
 
 # Retry health check
@@ -217,7 +240,9 @@ success "SEP Engine deployment completed successfully!"
 log ""
 log "Services running:"
 log "  Backend API: http://localhost:8000"
-log "  Frontend UI:  https://mxbikes.xyz"
+if compose_has_service frontend; then
+    log "  Frontend UI:  https://mxbikes.xyz"
+fi
 log ""
 log "Useful commands:"
 log "  View logs:    $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f"

@@ -7,8 +7,8 @@ import os
 from typing import Any, Dict, Iterable, Mapping, Optional
 
 from . import oanda as oanda_service
+from .position_tracker import TPSLPositionTracker
 from .risk_limits import RiskManager
-from scripts.research.simulator.tracker import TPSLPositionTracker
 
 logger = logging.getLogger(__name__)
 
