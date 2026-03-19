@@ -45,6 +45,7 @@ class StrategyInstrument:
     regime_filter: List[str] = field(default_factory=list)
     min_regime_confidence: float = 0.0
     invert_bundles: bool = False
+    require_st_peak: bool = False
     ml_primary_gate: bool = False
     allow_fallback: bool = True
     disable_bundle_overrides: bool = False
@@ -85,6 +86,7 @@ class StrategyProfile:
         bundle_defaults = _bundle_directives_from_spec(data.get("bundles"), base=None)
         instruments: Dict[str, StrategyInstrument] = {}
         for symbol, payload in (data.get("instruments") or {}).items():
+            invert_bundles = bool(payload.get("invert_bundles", False))
             session = (
                 SessionWindow.from_spec(payload.get("session"))
                 if isinstance(payload, dict)
@@ -120,7 +122,12 @@ class StrategyProfile:
                     )
                     or 0.0
                 ),
-                invert_bundles=bool(payload.get("invert_bundles", False)),
+                invert_bundles=invert_bundles,
+                require_st_peak=_maybe_bool(
+                    payload,
+                    "require_st_peak",
+                    data.get("global", {}).get("require_st_peak", invert_bundles),
+                ),
                 ml_primary_gate=bool(
                     payload.get(
                         "ml_primary_gate",
@@ -162,6 +169,7 @@ class StrategyProfile:
         key = symbol.upper()
         if key not in self.instruments:
             guard_defaults = self.global_defaults.get("guard_thresholds", {})
+            invert_bundles = bool(self.global_defaults.get("invert_bundles", False))
             self.instruments[key] = StrategyInstrument(
                 symbol=key,
                 hazard_max=_maybe_float(self.global_defaults, "hazard_max"),
@@ -178,7 +186,12 @@ class StrategyProfile:
                 min_regime_confidence=float(
                     self.global_defaults.get("min_regime_confidence", 0.0) or 0.0
                 ),
-                invert_bundles=bool(self.global_defaults.get("invert_bundles", False)),
+                invert_bundles=invert_bundles,
+                require_st_peak=_maybe_bool(
+                    self.global_defaults,
+                    "require_st_peak",
+                    invert_bundles,
+                ),
                 ml_primary_gate=bool(
                     self.global_defaults.get("ml_primary_gate", False)
                 ),
@@ -231,6 +244,15 @@ def _maybe_float(payload: Any, key: str) -> Optional[float]:
 def _guard_values(source: Any) -> Dict[str, Optional[float]]:
     mapping: Mapping[str, Any] = source if isinstance(source, Mapping) else {}
     return {key: _maybe_float(mapping, key) for key in _GUARD_KEYS}
+
+
+def _maybe_bool(source: Any, key: str, default: bool = False) -> bool:
+    if not isinstance(source, Mapping) or key not in source:
+        return bool(default)
+    value = source.get(key)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _normalise_semantic_filter(payload: Any) -> List[str]:

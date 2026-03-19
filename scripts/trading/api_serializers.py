@@ -110,6 +110,7 @@ def serialize_gate_metrics(
         payloads = {}
 
     entries: List[Dict[str, object]] = []
+    reason_counts: Dict[str, int] = {}
     now = datetime.now(timezone.utc)
     for inst in instruments:
         payload = payloads.get(inst.upper()) or {}
@@ -151,6 +152,8 @@ def serialize_gate_metrics(
             admitted, reason_details = gate_evaluation(payload, effective_profile)
 
         reasons = [_reason_code(reason) for reason in reason_details]
+        for reason in reasons:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
         coh_tau_slope = structural_metric(payload, "coherence_tau_slope")
         domain_wall_slope = structural_metric(payload, "domain_wall_slope")
         spectral_lowf_share = structural_metric(payload, "spectral_lowf_share")
@@ -183,7 +186,10 @@ def serialize_gate_metrics(
             }
         )
 
-    return {"as_of": now.isoformat(), "gates": entries}
+    sorted_counts = dict(
+        sorted(reason_counts.items(), key=lambda item: (-int(item[1]), item[0]))
+    )
+    return {"as_of": now.isoformat(), "gates": entries, "reason_counts": sorted_counts}
 
 
 def _reason_code(reason: object) -> str:

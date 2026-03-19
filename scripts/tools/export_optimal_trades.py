@@ -16,6 +16,10 @@ import sys
 from copy import deepcopy
 
 
+from scripts.research.simulator.gate_cache import (
+    ensure_historical_gate_cache,
+    gate_cache_path_for,
+)
 from scripts.research.simulator.gpu_parity_replay import run_gpu_parity_replay
 from scripts.research.simulator.models import (
     TPSLSimulationParams,
@@ -26,25 +30,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger("export_optimal_trades")
-
-
-def _align_profile_for_export(
-    inst_profile,
-    *,
-    use_regime: bool,
-    ml_primary_gate: bool,
-):
-    """Mirror GPU admission assumptions in the slower simulator export."""
-
-    if inst_profile is None:
-        return None
-
-    # The GPU sweep ignores YAML regime labels unless --use-regime is enabled.
-    if not use_regime or ml_primary_gate:
-        inst_profile.regime_filter = []
-        inst_profile.min_regime_confidence = 0.0
-
-    return inst_profile
 
 
 def _gpu_parity_pnl_bps(trades: list[object]) -> float:
@@ -74,6 +59,49 @@ def _gpu_parity_pnl_bps(trades: list[object]) -> float:
     return total_bps
 
 
+def _build_simulation_params(
+    p: dict,
+    signal_type: str,
+    *,
+    ml_primary_gate: bool,
+    exposure_scale: float,
+    require_st_peak: bool,
+) -> TPSLSimulationParams:
+    hazard = p.get("hazard_max") if "hazard_max" in p else p.get("Haz")
+    reps = p.get("min_reps") if "min_reps" in p else p.get("Reps")
+    hold = p.get("hold_minutes") if "hold_minutes" in p else p.get("Hold")
+    sl = p.get("sl_margin") if "sl_margin" in p else p.get("SL")
+    tp = p.get("tp_margin") if "tp_margin" in p else p.get("TP")
+    trail = p.get("trailing_stop_pct") if "trailing_stop_pct" in p else p.get("Trail")
+    haz_ex = p.get("hazard_exit") if "hazard_exit" in p else p.get("HazEx")
+    be = p.get("breakeven") if "breakeven" in p else p.get("BE")
+    coh = p.get("Coh")
+    ent = p.get("Ent")
+    stab = p.get("Stab")
+
+    return TPSLSimulationParams(
+        ml_primary_gate=ml_primary_gate,
+        disable_bundle_overrides=True,
+        allow_fallback=False,
+        exposure_scale=exposure_scale,
+        hazard_override=float(hazard) if hazard and signal_type != "mean_reversion" else None,
+        hazard_min=float(hazard) if hazard and signal_type == "mean_reversion" else None,
+        min_repetitions=int(reps) if reps else 1,
+        hold_minutes=int(float(hold)) if hold else 24 * 60,
+        stop_loss_pct=float(sl) if sl else None,
+        take_profit_pct=float(tp) if tp else None,
+        trailing_stop_pct=float(trail) if trail else None,
+        hazard_exit_threshold=float(haz_ex) if haz_ex else None,
+        breakeven_trigger_pct=float(be) if be else None,
+        coherence_threshold=float(coh) if coh else None,
+        entropy_threshold=float(ent) if ent else None,
+        stability_threshold=float(stab) if stab else None,
+        signal_type=signal_type,
+        st_peak_mode=bool(signal_type == "mean_reversion" and require_st_peak),
+        disable_stacking=p.get("disable_stacking", False),
+    )
+
+
 def export_single_trade_history(
     instrument: str,
     start_dt: datetime,
@@ -85,6 +113,7 @@ def export_single_trade_history(
     profile_path: Path | None = None,
     exposure_scale: float | None = None,
     per_position_pct_cap: float | None = None,
+    require_st_peak: bool = False,
 ) -> bool:
     logger.info(f"Initializing simulation export for {instrument}...")
 
@@ -105,44 +134,18 @@ def export_single_trade_history(
         if exposure_scale is not None
         else float(os.getenv("EXPOSURE_SCALE", "0.02") or 0.02)
     )
-
-    # Handle the fact that 'p' could come from live_params.json OR GPU optimizer raw trace
-    # The 'p' here is already the best_combo from the main loop, so we don't need `p = best_combo`
-    # as it would be redundant and potentially incorrect if `best_combo` is not defined in this scope.
-    # Assuming 'p' passed to the function is already the correct parameter dictionary.
-    hazard = p.get("hazard_max") if "hazard_max" in p else p.get("Haz")
-    reps = p.get("min_reps") if "min_reps" in p else p.get("Reps")
-    hold = p.get("hold_minutes") if "hold_minutes" in p else p.get("Hold")
-    sl = p.get("sl_margin") if "sl_margin" in p else p.get("SL")
-    tp = p.get("tp_margin") if "tp_margin" in p else p.get("TP")
-    trail = p.get("trailing_stop_pct") if "trailing_stop_pct" in p else p.get("Trail")
-    haz_ex = p.get("hazard_exit") if "hazard_exit" in p else p.get("HazEx")
-    be = p.get("breakeven") if "breakeven" in p else p.get("BE")
-    coh = p.get("Coh")
-    ent = p.get("Ent")
-    stab = p.get("Stab")
-
-    sim_params = TPSLSimulationParams(
-        ml_primary_gate=ml_primary_gate,
-        disable_bundle_overrides=True,
-        allow_fallback=False,
-        exposure_scale=resolved_exposure_scale,
-        hazard_override=float(hazard) if hazard and signal_type != "mean_reversion" else None,
-        hazard_min=float(hazard) if hazard and signal_type == "mean_reversion" else None,
-        min_repetitions=int(reps) if reps else 1,
-        # hold is already in minutes from parameter grid
-        hold_minutes=int(float(hold)) if hold else 24 * 60,
-        stop_loss_pct=float(sl) if sl else None,
-        take_profit_pct=float(tp) if tp else None,
-        trailing_stop_pct=float(trail) if trail else None,
-        hazard_exit_threshold=float(haz_ex) if haz_ex else None,
-        breakeven_trigger_pct=float(be) if be else None,
-        coherence_threshold=float(coh) if coh else None,
-        entropy_threshold=float(ent) if ent else None,
-        stability_threshold=float(stab) if stab else None,
+    ensure_historical_gate_cache(
+        instrument,
+        start_dt,
+        end_dt,
         signal_type=signal_type,
-        st_peak_mode=(signal_type == "mean_reversion"),
-        disable_stacking=p.get("disable_stacking", False),
+    )
+    sim_params = _build_simulation_params(
+        p,
+        signal_type,
+        ml_primary_gate=ml_primary_gate,
+        exposure_scale=resolved_exposure_scale,
+        require_st_peak=require_st_peak,
     )
 
     res = run_gpu_parity_replay(
@@ -257,6 +260,11 @@ def main():
         help="Strategy profile used for the high-fidelity simulator.",
     )
     parser.add_argument(
+        "--require-st-peak",
+        action="store_true",
+        help="Require structural-tension peak reversals during mean-reversion replay/export.",
+    )
+    parser.add_argument(
         "--exposure-scale",
         type=float,
         default=float(os.getenv("EXPOSURE_SCALE", "0.02") or 0.02),
@@ -329,6 +337,15 @@ def main():
 
         p = deepcopy(p)
 
+        gate_cache = gate_cache_path_for(inst, args.signal_type)
+        ensure_historical_gate_cache(
+            inst,
+            start_dt,
+            end_dt,
+            signal_type=args.signal_type,
+            gate_cache_path=gate_cache,
+        )
+
         effective_use_regime = args.use_regime and not args.ml_primary_gate
         ml_map = {}
         ml_threshold = 0.50
@@ -388,7 +405,7 @@ def main():
                     f"[{inst}] ML-primary gate active; skipping regime filter to mirror archived strategy."
                 )
 
-            cache_path = Path(f"output/market_data/{inst}.gates.jsonl")
+            cache_path = gate_cache
             if cache_path.exists() and (regime_map or ml_map):
                 import tempfile
                 import shutil
@@ -468,6 +485,7 @@ def main():
                         profile_path=Path(args.profile_path),
                         exposure_scale=args.exposure_scale,
                         per_position_pct_cap=args.per_position_pct_cap,
+                        require_st_peak=args.require_st_peak,
                     )
                 finally:
                     shutil.move(backup_path, cache_path)
@@ -482,6 +500,7 @@ def main():
                     profile_path=Path(args.profile_path),
                     exposure_scale=args.exposure_scale,
                     per_position_pct_cap=args.per_position_pct_cap,
+                    require_st_peak=args.require_st_peak,
                 )
         else:
             export_single_trade_history(
@@ -494,6 +513,7 @@ def main():
                 profile_path=Path(args.profile_path),
                 exposure_scale=args.exposure_scale,
                 per_position_pct_cap=args.per_position_pct_cap,
+                require_st_peak=args.require_st_peak,
             )
 
     logger.info("All 7 assets successfully mapped and exported.")

@@ -15,6 +15,10 @@ except Exception:  # pragma: no cover
     redis = None  # type: ignore
 
 from scripts.research.data_store import ManifoldDataStore
+from scripts.research.simulator.gate_cache import (
+    ensure_historical_gate_cache,
+    gate_cache_path_for,
+)
 from scripts.trading.candle_utils import to_epoch_ms
 from scripts.research.simulator.models import OHLCCandle
 
@@ -70,7 +74,11 @@ class BacktestDataAdapter:
         return candles
 
     def load_gate_events(
-        self, instrument: str, start: datetime, end: datetime
+        self,
+        instrument: str,
+        start: datetime,
+        end: datetime,
+        signal_type: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         start_ms = to_epoch_ms(start)
         end_ms = to_epoch_ms(end)
@@ -78,7 +86,19 @@ class BacktestDataAdapter:
         # --- START CACHE LOAD ---
         if ManifoldDataStore is not None:
             store = ManifoldDataStore()
-            gate_cache = store.data_dir / f"{instrument.upper()}.gates.jsonl"
+            gate_cache = gate_cache_path_for(
+                instrument, signal_type, base_dir=store.data_dir
+            )
+            candle_cache = store.data_dir / f"{instrument.upper()}.jsonl"
+            ensure_historical_gate_cache(
+                instrument,
+                start,
+                end,
+                signal_type=signal_type,
+                base_dir=store.data_dir,
+                candle_cache_path=candle_cache if candle_cache.exists() else None,
+                gate_cache_path=gate_cache,
+            )
             if gate_cache.exists():
                 try:
                     gate_entries = []

@@ -69,8 +69,8 @@ def main():
             f"{inst:<10} | {res['samples']:<8} | {res['win_rate']:>8.1f}% | {res['profit_factor']:>9.2f} | {strategy:<25}"
         )
         
-    # Write the mapping to a robust configuration file for the frontend to consume
-    mapping_path = Path("config/regime_mapping.json")
+    # Persist the research artifact under output/ instead of the live config directory.
+    mapping_path = Path("output/regime_mapping.json")
     mapping_path.parent.mkdir(parents=True, exist_ok=True)
     with open(mapping_path, "w") as f:
         json.dump({"instrument_strategies": results}, f, indent=2)

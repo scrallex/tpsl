@@ -65,6 +65,7 @@ def _process_timeline(
     idx_grid: torch.Tensor,
     target_source: int,
     is_mean_reversion: bool,
+    require_st_peak: bool,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
     for t in range(T):
@@ -189,14 +190,23 @@ def _process_timeline(
             gate_en = g_ent[t]
 
             if is_mean_reversion:
-                valid_gate = (
-                    (gate_hz >= arr_haz)
-                    & (gate_rp >= arr_reps)
-                    & (gate_co >= arr_coh)
-                    & (gate_st >= arr_stab)
-                    & (gate_en <= arr_ent)
-                    & g_st_peak[t]
-                )
+                if require_st_peak:
+                    valid_gate = (
+                        (gate_hz >= arr_haz)
+                        & (gate_rp >= arr_reps)
+                        & (gate_co >= arr_coh)
+                        & (gate_st >= arr_stab)
+                        & (gate_en <= arr_ent)
+                        & g_st_peak[t]
+                    )
+                else:
+                    valid_gate = (
+                        (gate_hz >= arr_haz)
+                        & (gate_rp >= arr_reps)
+                        & (gate_co >= arr_coh)
+                        & (gate_st >= arr_stab)
+                        & (gate_en <= arr_ent)
+                    )
             else:
                 valid_gate = (
                     (gate_hz <= arr_haz)
@@ -279,6 +289,7 @@ class GpuBacktestRunner:
         preloaded_data: Optional[GpuDataTuple] = None,
         use_regime: bool = False,
         target_signal_type: str = "trend_sniper",
+        require_st_peak: bool = False,
     ) -> Tuple[List[Dict[str, Any]], GpuDataTuple]:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(
@@ -316,7 +327,14 @@ class GpuBacktestRunner:
                 g_st_peak,
                 g_con_haz,
                 times,
-            ) = load_data_to_gpu(instrument, start, end, cache_path, device)
+            ) = load_data_to_gpu(
+                instrument,
+                start,
+                end,
+                cache_path,
+                device,
+                target_signal_type=target_signal_type,
+            )
 
         T = closes.shape[0]
         if T == 0:
@@ -401,6 +419,7 @@ class GpuBacktestRunner:
             idx_grid,
             target_src_code,
             target_signal_type == "mean_reversion",
+            require_st_peak,
         )
 
         pnl_out = metrics.cum_pnl_bps.cpu().numpy()

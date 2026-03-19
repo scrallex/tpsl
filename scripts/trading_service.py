@@ -33,6 +33,15 @@ from scripts.trading.risk_limits import RiskLimits, RiskManager
 
 MAX_PRICE_HISTORY_POINTS = 500
 DEFAULT_CANDLE_FETCH_COUNT = 200
+DEFAULT_LIVE_INSTRUMENTS = (
+    "AUD_USD",
+    "EUR_USD",
+    "GBP_USD",
+    "NZD_USD",
+    "USD_CAD",
+    "USD_CHF",
+    "USD_JPY",
+)
 
 
 logger = configure_logging(__name__)
@@ -52,13 +61,9 @@ class TradingService:
             os.getenv("STRATEGY_PROFILE", "config/mean_reversion_strategy.yaml")
         )
         profile = StrategyProfile.load(self.strategy_profile_path)
-        default_pairs = sorted(profile.instruments.keys()) or [
-            "EUR_USD",
-            "GBP_USD",
-            "USD_JPY",
-        ]
+        default_pairs = sorted(profile.instruments.keys()) or list(DEFAULT_LIVE_INSTRUMENTS)
         self.enabled_pairs = list(
-            {inst.upper() for inst in (enabled_pairs or default_pairs)}
+            dict.fromkeys(inst.upper() for inst in (enabled_pairs or default_pairs))
         )
 
         self.oanda = oanda_service.OandaConnector(read_only=read_only)
@@ -290,6 +295,19 @@ class TradingService:
             start=start, end=end, instruments=instruments
         )
 
+    def strategy_mapping(self) -> Dict[str, Dict[str, str]]:
+        mapping: Dict[str, str] = {}
+        for symbol, profile in sorted(self.portfolio_manager.strategy.instruments.items()):
+            if profile.invert_bundles or (
+                profile.hazard_min is not None and profile.hazard_max is None
+            ):
+                mapping[symbol] = "Mean Reversion"
+            elif profile.hazard_max is not None:
+                mapping[symbol] = "Momentum"
+            else:
+                mapping[symbol] = "Unspecified"
+        return {"instrument_strategies": mapping}
+
     # ------------------------------------------------------------------
     # Public API used by HTTP layer and portfolio manager
     # ------------------------------------------------------------------
@@ -503,6 +521,7 @@ class TradingService:
         granularity: str = "M5",
         count: int = DEFAULT_CANDLE_FETCH_COUNT,
     ) -> bool:
+        # Manual HTTP/API diagnostic path; the live trading loop reads streamed S5 candles.
         return oanda_service.fetch_and_store_candles(
             self, instrument, granularity, count
         )
@@ -510,6 +529,7 @@ class TradingService:
     def fetch_candles_for_enabled_pairs(
         self, granularity: str = "M5", count: int = DEFAULT_CANDLE_FETCH_COUNT
     ) -> None:
+        # Manual HTTP/API diagnostic path; the live trading loop reads streamed S5 candles.
         oanda_service.fetch_candles_for_enabled_pairs(self, granularity, count)
 
     def place_order(

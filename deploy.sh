@@ -179,6 +179,25 @@ run_parity_checks() {
     make strategy-fingerprint PARAMS_PATH="$params_path"
 }
 
+run_runtime_validation() {
+    local redis_url="${VALKEY_URL:-redis://valkey:6379/0}"
+    local strategy_path="${STRATEGY_PROFILE:-/app/config/mean_reversion_strategy.yaml}"
+    local instruments_csv="${HOTBAND_PAIRS:-}"
+    local -a args=(
+        env PYTHONPATH=/app python /app/scripts/tools/validate_live_runtime.py
+        --redis-url "$redis_url"
+        --strategy-path "$strategy_path"
+    )
+
+    if [[ -n "$instruments_csv" ]]; then
+        IFS=',' read -r -a validation_instruments <<< "$instruments_csv"
+        args+=(--instruments "${validation_instruments[@]}")
+    fi
+
+    log "Validating live runtime feeds and gate payloads..."
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T backend "${args[@]}"
+}
+
 # Validate required OANDA credentials
 if [[ -n "${OANDA_API_KEY:-}" ]]; then
     oanda_key_state="set"
@@ -293,6 +312,8 @@ for i in $(seq 1 $MAX_RETRIES); do
         exit 1
     fi
 done
+
+run_runtime_validation
 
 # Show final status
 log "Deployment status:"

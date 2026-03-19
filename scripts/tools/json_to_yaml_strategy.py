@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import json
 import os
-import yaml
 from pathlib import Path
+import sys
+from typing import Any, Dict
+
+import yaml
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from scripts.trading.live_params import iter_signal_payloads
 
 
 def _parse_args():
@@ -33,22 +44,108 @@ def _parse_args():
         action="store_true",
         help="Project the GPU regime filter into the live YAML.",
     )
+    parser.add_argument(
+        "--canonical-json-output",
+        help="Optional path to write the selected signal params as the promoted live params snapshot.",
+    )
+    parser.add_argument(
+        "--require-st-peak",
+        action="store_true",
+        help="Require structural-tension peak reversal for mean-reversion entries.",
+    )
     return parser.parse_args()
 
 
-def generate_yaml():
+def _is_mean_reversion(signal_type: str) -> bool:
+    return str(signal_type or "").strip().lower() == "mean_reversion"
+
+
+def _regime_filters_for(
+    instrument: str,
+    *,
+    use_regime: bool,
+    ml_primary_gate: bool,
+) -> list[str]:
+    if not use_regime or ml_primary_gate:
+        return []
+    is_pacific = "JPY" in instrument or "AUD" in instrument or "NZD" in instrument
+    return [] if is_pacific else ["long_ok", "short_ok"]
+
+
+def _build_instrument_profile(
+    instrument: str,
+    signal_params: Dict[str, Any],
+    *,
+    signal_type: str,
+    ml_primary_gate: bool,
+    use_regime: bool,
+    require_st_peak: bool,
+) -> Dict[str, Any]:
+    is_mean_reversion = _is_mean_reversion(signal_type)
+    hazard_value = signal_params.get("Haz")
+    regime_filters = _regime_filters_for(
+        instrument,
+        use_regime=use_regime,
+        ml_primary_gate=ml_primary_gate,
+    )
+
+    guards = {}
+    if signal_params.get("Coh") is not None:
+        guards["min_coherence"] = signal_params["Coh"]
+    if signal_params.get("Ent") is not None:
+        guards["max_entropy"] = signal_params["Ent"]
+    if signal_params.get("Stab") is not None:
+        guards["min_stability"] = signal_params["Stab"]
+
+    instrument_profile: Dict[str, Any] = {
+        "session": {"start": "00:00Z", "end": "23:59Z"},
+        "invert_bundles": is_mean_reversion,
+        "require_st_peak": bool(is_mean_reversion and require_st_peak),
+        "allow_fallback": False,
+        "ml_primary_gate": bool(ml_primary_gate),
+        "hazard_min": hazard_value if is_mean_reversion else None,
+        "hazard_max": None if is_mean_reversion else hazard_value,
+        "min_repetitions": signal_params.get("Reps", 1),
+        "stop_loss_pct": signal_params.get("SL"),
+        "take_profit_pct": signal_params.get("TP"),
+        "trailing_stop_pct": signal_params.get("Trail"),
+        "breakeven_trigger_pct": signal_params.get("BE"),
+        "guards": guards,
+        "exit": {
+            "exit_horizon": 40,
+            "hold_rearm": True,
+            "max_hold_minutes": signal_params.get("Hold", 1000),
+        },
+    }
+    if regime_filters:
+        instrument_profile["regime_filter"] = regime_filters
+    return instrument_profile
+
+
+def _canonical_live_params(
+    params: Dict[str, Any],
+    signal_type: str,
+) -> Dict[str, Dict[str, Any]]:
+    return {
+        instrument: payload
+        for instrument, payload in iter_signal_payloads(params, signal_type)
+    }
+
+
+def generate_yaml() -> int:
     args = _parse_args()
+    is_mean_reversion = _is_mean_reversion(args.signal_type)
     output_dict = {
         "global": {
-            "direction": "momentum",
+            "direction": "mean_reversion" if is_mean_reversion else "momentum",
             "min_repetitions": 1,
             "hazard_max": 0.99,
             "hazard_exit_threshold": 0.0,
             "exit_horizon": 480,
             "session_exit_minutes": 5,
             "margin_hyst_high": 0.30,
-            "regime_filter": [],
             "min_regime_confidence": 0.0,
+            "require_st_peak": bool(is_mean_reversion and args.require_st_peak),
             "allow_fallback": False,
             "ml_primary_gate": bool(args.ml_primary_gate),
             "guard_thresholds": {
@@ -72,67 +169,49 @@ def generate_yaml():
 
     if not os.path.exists(params_path):
         print(f"Error: Could not find {params_path}")
-        return
+        return 1
 
     with open(params_path, "r") as f:
         data = json.load(f)
 
-    for inst, full_params in data.items():
-        if target_signal not in full_params:
-            continue
-            
-        p = full_params[target_signal]
+    promoted_params = _canonical_live_params(data, target_signal)
+    for instrument, signal_params in promoted_params.items():
+        output_dict["instruments"][instrument] = _build_instrument_profile(
+            instrument,
+            signal_params,
+            signal_type=target_signal,
+            ml_primary_gate=bool(args.ml_primary_gate),
+            use_regime=bool(args.use_regime),
+            require_st_peak=bool(args.require_st_peak),
+        )
 
-        # Build instrument profile
-        haz = p.get("Haz")
-        reps = p.get("Reps", 1)
-        hold = p.get("Hold", 1000)
-        coh = p.get("Coh")
-        ent = p.get("Ent")
-        stab = p.get("Stab")
-
-        sl = p.get("SL")
-        tp = p.get("TP")
-        trail = p.get("Trail")
-        be = p.get("BE")
-
-        is_pacific = "JPY" in inst or "AUD" in inst or "NZD" in inst
-        regime_filters = []
-        if args.use_regime and not args.ml_primary_gate:
-            regime_filters = [] if is_pacific else ["long_ok", "short_ok"]
-
-        guards = {}
-        if coh is not None:
-            guards["min_coherence"] = coh
-        if ent is not None:
-            guards["max_entropy"] = ent
-        if stab is not None:
-            guards["min_stability"] = stab
-
-        output_dict["instruments"][inst] = {
-            "session": {"start": "00:00Z", "end": "23:59Z"},
-            "invert_bundles": True,  # MR flips directional spikes into fades
-            "allow_fallback": False,
-            "ml_primary_gate": bool(args.ml_primary_gate),
-            "regime_filter": regime_filters,
-            "hazard_min": haz,  # MR uses hazard_min
-            "hazard_max": None,
-            "min_repetitions": reps,
-            "stop_loss_pct": sl,
-            "take_profit_pct": tp,
-            "trailing_stop_pct": trail,
-            "breakeven_trigger_pct": be,
-            "guards": guards,
-            "exit": {"exit_horizon": 40, "hold_rearm": True, "max_hold_minutes": hold},
-        }
+    if not output_dict["instruments"]:
+        print(
+            f"Error: no instruments found for signal_type={target_signal!r} in {params_path}"
+        )
+        return 1
 
     out_path = Path(args.output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         yaml.dump(output_dict, f, default_flow_style=False, sort_keys=False)
 
+    if args.canonical_json_output:
+        canonical_path = Path(args.canonical_json_output)
+        canonical_path.parent.mkdir(parents=True, exist_ok=True)
+        canonical_path.write_text(
+            json.dumps(promoted_params, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
     print(f"Successfully wrote {len(output_dict['instruments'])} instrument configs to {out_path}")
+    if args.canonical_json_output:
+        print(
+            "Successfully wrote "
+            f"{len(promoted_params)} promoted signal payloads to {args.canonical_json_output}"
+        )
+    return 0
 
 
 if __name__ == "__main__":
-    generate_yaml()
+    raise SystemExit(generate_yaml())

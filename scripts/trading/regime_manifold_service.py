@@ -130,19 +130,6 @@ class RegimeManifoldService:
             for inst in config.instruments
         }
 
-        self.regime_mapping = {}
-        try:
-            mapping_path = Path("config/regime_mapping.json")
-            if mapping_path.exists():
-                with open(mapping_path) as f:
-                    data = json.load(f)
-                    self.regime_mapping = data.get("instrument_strategies", {})
-                logger.info(
-                    "Loaded regime mapping for %d instruments", len(self.regime_mapping)
-                )
-        except Exception as e:
-            logger.warning("Could not load regime_mapping.json: %s", e)
-
         self._stop = False
         disable_metrics = str(os.getenv("DISABLE_REGIME_METRICS", "0")).lower() in (
             "1",

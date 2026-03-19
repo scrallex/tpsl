@@ -17,11 +17,12 @@ SIGNAL_TYPE="${SIGNAL_TYPE:-mean_reversion}"
 MAX_COMBINATIONS="${MAX_COMBINATIONS:-500000}"
 MIN_TRADES="${MIN_TRADES:-10}"
 MAX_TRADES="${MAX_TRADES:-300}"
-USE_REGIME="${USE_REGIME:-1}"
+USE_REGIME="${USE_REGIME:-0}"
 # Keep the baseline live profile aligned with the structural backtest unless ML is
 # explicitly requested for a dedicated export/evaluation pass.
 USE_ML="${USE_ML:-0}"
 ML_PRIMARY_GATE="${ML_PRIMARY_GATE:-0}"
+REQUIRE_ST_PEAK="${REQUIRE_ST_PEAK:-0}"
 REBUILD_ML="${REBUILD_ML:-auto}"
 REFINE_SWEEP="${REFINE_SWEEP:-0}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -29,6 +30,7 @@ EXPORT_ONLY="${EXPORT_ONLY:-0}"
 GENERATE_LIVE_PROFILE="${GENERATE_LIVE_PROFILE:-1}"
 AUDIT_LIVE_PROFILE="${AUDIT_LIVE_PROFILE:-1}"
 LIVE_PROFILE_PATH="${LIVE_PROFILE_PATH:-config/mean_reversion_strategy.yaml}"
+CANONICAL_LIVE_PARAMS_PATH="${CANONICAL_LIVE_PARAMS_PATH:-config/live_params.json}"
 EXPORT_PARAMS_PATH="${EXPORT_PARAMS_PATH:-}"
 EXPORT_END_TIME="${EXPORT_END_TIME:-}"
 REFERENCE_EXPORT_ROOT="${REFERENCE_EXPORT_ROOT:-output/LiveParams}"
@@ -127,6 +129,9 @@ run_window_sweep() {
     )
     if [[ "$USE_REGIME" == "1" ]]; then
         optimizer_cmd+=(--use-regime)
+    fi
+    if [[ "$REQUIRE_ST_PEAK" == "1" ]]; then
+        optimizer_cmd+=(--require-st-peak)
     fi
     if [[ "$REFINE_SWEEP" == "1" ]]; then
         optimizer_cmd+=(--refine)
@@ -231,6 +236,9 @@ export_window_trades() {
     if [[ "$USE_REGIME" == "1" ]]; then
         export_cmd+=(--use-regime)
     fi
+    if [[ "$REQUIRE_ST_PEAK" == "1" ]]; then
+        export_cmd+=(--require-st-peak)
+    fi
     if [[ "$USE_ML" == "1" ]]; then
         export_cmd+=(--use-ml)
         if [[ "$ML_PRIMARY_GATE" == "1" ]]; then
@@ -267,12 +275,19 @@ generate_live_profile() {
     if [[ "$ML_PRIMARY_GATE" == "1" ]]; then
         extra_args+=(--ml-primary-gate)
     fi
+    if [[ "$USE_REGIME" == "1" ]]; then
+        extra_args+=(--use-regime)
+    fi
+    if [[ "$REQUIRE_ST_PEAK" == "1" ]]; then
+        extra_args+=(--require-st-peak)
+    fi
     echo "=================================================="
     echo "Phase 4: Generate Live Strategy Profile"
     echo "=================================================="
     run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/tools/json_to_yaml_strategy.py \
         --params-path output/live_params.json \
         --output-path "$LIVE_PROFILE_PATH" \
+        --canonical-json-output "$CANONICAL_LIVE_PARAMS_PATH" \
         --signal-type "$SIGNAL_TYPE" \
         "${extra_args[@]}"
 }
@@ -281,6 +296,12 @@ audit_live_profile() {
     local extra_args=()
     if [[ "$ML_PRIMARY_GATE" == "1" ]]; then
         extra_args+=(--ml-primary-gate)
+    fi
+    if [[ "$USE_REGIME" == "1" ]]; then
+        extra_args+=(--use-regime)
+    fi
+    if [[ "$REQUIRE_ST_PEAK" == "1" ]]; then
+        extra_args+=(--require-st-peak)
     fi
     echo "=================================================="
     echo "Phase 5: Audit Live Strategy Profile"
@@ -295,6 +316,8 @@ audit_live_profile() {
 echo "Running sweep windows: ${WINDOWS[*]}"
 echo "Instruments: ${INSTRUMENTS[*]}"
 echo "Signal type: ${SIGNAL_TYPE}"
+echo "Use regime filter: ${USE_REGIME}"
+echo "Require st_peak: ${REQUIRE_ST_PEAK}"
 echo "Export only: ${EXPORT_ONLY}"
 echo "ML primary gate: ${ML_PRIMARY_GATE}"
 
@@ -340,5 +363,6 @@ echo "Window outputs are in: $(printf 'output/%sday ' "${WINDOWS[@]}")"
 echo "Baseline output/live_params.json restored from ${WINDOWS[0]}-day sweep."
 if [[ "$GENERATE_LIVE_PROFILE" == "1" ]]; then
     echo "Live profile updated at: ${LIVE_PROFILE_PATH}"
+    echo "Promoted live params snapshot updated at: ${CANONICAL_LIVE_PARAMS_PATH}"
 fi
 echo "=================================================="

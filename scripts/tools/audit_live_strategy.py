@@ -10,7 +10,12 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from scripts.trading.gate_loader import StrategyProfile
+from scripts.trading.live_params import iter_signal_payloads
 
 
 def _parse_args() -> argparse.Namespace:
@@ -42,6 +47,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Expect the GPU regime filter in the live YAML.",
     )
+    parser.add_argument(
+        "--require-st-peak",
+        action="store_true",
+        help="Expect structural-tension peak reversal to remain enabled for mean-reversion entries.",
+    )
     return parser.parse_args()
 
 
@@ -72,12 +82,7 @@ def _expected_regime_filter(instrument: str, *, use_regime: bool) -> list[str]:
 def _iter_param_instruments(
     params: dict[str, Any], signal_type: str
 ) -> Iterable[tuple[str, dict[str, Any]]]:
-    for instrument, payload in sorted(params.items()):
-        if not isinstance(payload, dict):
-            continue
-        signal_payload = payload.get(signal_type)
-        if isinstance(signal_payload, dict):
-            yield instrument.upper(), signal_payload
+    yield from iter_signal_payloads(params, signal_type)
 
 
 def main() -> int:
@@ -123,7 +128,10 @@ def main() -> int:
             "max_entropy": p.get("Ent"),
             "allow_fallback": False,
             "ml_primary_gate": bool(args.ml_primary_gate),
-            "invert_bundles": True,
+            "invert_bundles": args.signal_type == "mean_reversion",
+            "require_st_peak": bool(
+                args.signal_type == "mean_reversion" and args.require_st_peak
+            ),
             "regime_filter": []
             if args.ml_primary_gate
             else _expected_regime_filter(inst, use_regime=args.use_regime),
@@ -143,6 +151,7 @@ def main() -> int:
             "allow_fallback": live.allow_fallback,
             "ml_primary_gate": live.ml_primary_gate,
             "invert_bundles": live.invert_bundles,
+            "require_st_peak": live.require_st_peak,
             "regime_filter": list(live.regime_filter or []),
         }
 

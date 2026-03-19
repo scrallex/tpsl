@@ -177,6 +177,11 @@ interface GateMetric {
   action?: string;
 }
 
+interface GateMetricsPayload {
+  gates?: GateMetric[];
+  reason_counts?: Record<string, number>;
+}
+
 interface HistoryPoint {
   time: string;
   close: number;
@@ -216,6 +221,7 @@ export default function LiveConsole() {
   const [lastPricingUpdate, setLastPricingUpdate] = useState<number | null>(null);
   const [navSummary, setNavSummary] = useState<NavSummary | null>(null);
   const [gateMetrics, setGateMetrics] = useState<GateMetric[]>([]);
+  const [gateReasonCounts, setGateReasonCounts] = useState<Record<string, number>>({});
   const [regimeMapping, setRegimeMapping] = useState<RegimeMapping | null>(null);
   const [killSwitchUpdating, setKillSwitchUpdating] = useState(false);
   const [tradingActiveUpdating, setTradingActiveUpdating] = useState(false);
@@ -294,12 +300,14 @@ export default function LiveConsole() {
 
     const fetchGates = async () => {
       try {
-        const payload = await fetchJson<{ gates: GateMetric[] }>("/api/metrics/gates");
+        const payload = await fetchJson<GateMetricsPayload>("/api/metrics/gates");
         if (!mounted) return;
         setGateMetrics(Array.isArray(payload.gates) ? payload.gates : []);
+        setGateReasonCounts(payload.reason_counts ?? {});
       } catch (error) {
         if (!mounted) return;
         setGateMetrics((prev) => prev);
+        setGateReasonCounts((prev) => prev);
       }
     };
 
@@ -500,6 +508,16 @@ export default function LiveConsole() {
         ? "Max gate age across enabled pairs"
         : "Waiting for gate payloads";
 
+  const topGateReason = useMemo(() => {
+    const entries = Object.entries(gateReasonCounts);
+    if (!entries.length) return null;
+    const [code, count] = entries.sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    })[0];
+    return { code, count, label: formatGateReason(code) };
+  }, [gateReasonCounts]);
+
   const gateByInstrument = useMemo(() => {
     const map: Record<string, GateMetric> = {};
     for (const entry of gateMetrics) {
@@ -651,6 +669,25 @@ export default function LiveConsole() {
               <span className="metric__label">Gate Freshness</span>
               <span className={metricValueClass(gateMetricTone)}>{gateMetricValue}</span>
               <span className="metric__hint">{gateMetricHint}</span>
+            </div>
+            <div className="metric">
+              <span className="metric__label">Gate Blocks</span>
+              <span
+                className={metricValueClass(
+                  topGateReason?.code === "st_no_peak_reversal"
+                    ? "danger"
+                    : topGateReason
+                      ? "warning"
+                      : "muted"
+                )}
+              >
+                {topGateReason ? formatInteger(topGateReason.count) : "—"}
+              </span>
+              <span className="metric__hint">
+                {topGateReason
+                  ? `${topGateReason.label} leads current rejections`
+                  : "No blocked gate reasons recorded"}
+              </span>
             </div>
           </div>
         </section>

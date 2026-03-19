@@ -38,6 +38,7 @@ def relaxed_gate_profile(profile: "StrategyInstrument") -> "StrategyInstrument":
         regime_filter=[],
         min_regime_confidence=0.0,
         guards=relaxed_guards,
+        require_st_peak=False,
     )
 
 
@@ -270,7 +271,7 @@ def gate_evaluation(
         )
     )
 
-    if getattr(profile, "invert_bundles", False):
+    if getattr(profile, "require_st_peak", getattr(profile, "invert_bundles", False)):
         if not payload.get("st_peak"):
             reasons.append("st_no_peak_reversal")
 

@@ -302,7 +302,7 @@ def get_bundle_hits(
     if active_catalog is None:
         config_path = Path(
             bundle_config
-            or os.getenv("BUNDLE_STRATEGY_FILE", "config/bundle_strategy.yaml")
+            or os.getenv("BUNDLE_STRATEGY_FILE", "output/bundle_strategy.yaml")
         )
         active_catalog = _catalog_from_path(config_path)
         if active_catalog is None:

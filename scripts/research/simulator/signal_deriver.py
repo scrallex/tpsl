@@ -6,6 +6,7 @@ from scripts.trading.candle_utils import to_epoch_ms
 
 import math
 from bisect import insort
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 SQUEEZE_ENTROPY_CEILING = 1.1
 SQUEEZE_HAZARD_CEILING = 0.25
+DEFAULT_REGIME_ADMIT_REGIMES = ("trend_bull", "trend_bear")
 
 
 class HazardCalibrator:
@@ -45,6 +47,14 @@ class HazardCalibrator:
             return 1.0
         idx = int(self.percentile * (len(self._samples) - 1))
         return self._samples[idx]
+
+
+def _regime_direction_for(regime: str) -> str:
+    if "bull" in regime:
+        return "BUY"
+    if "bear" in regime:
+        return "SELL"
+    return "FLAT"
 
 
 def _normalize_to_codec_candles(candles: Sequence[Any]) -> List[Candle]:
@@ -308,4 +318,129 @@ def derive_signals(
     return events
 
 
-__all__ = ["derive_signals"]
+def derive_regime_manifold_gates(
+    instrument: str,
+    start: datetime | str,
+    end: datetime | str,
+    *,
+    candles: Optional[Sequence[Any]] = None,
+    granularity: str = "S5",
+    cache_path: Optional[Path] = None,
+    window_candles: int = 64,
+    stride_candles: int = 16,
+    atr_period: int = 14,
+    hazard_percentile: float = 0.8,
+    signature_retention_minutes: int = 60,
+    admit_regimes: Sequence[str] = DEFAULT_REGIME_ADMIT_REGIMES,
+    min_confidence: float = 0.55,
+    lambda_scale: float = 0.1,
+    hazard_cap: Optional[float] = 1.0,
+) -> List[Dict[str, Any]]:
+    """Derive dense historical gates that mirror the live regime service."""
+
+    start_dt = parse_utc_time(start)
+    end_dt = parse_utc_time(end)
+
+    if candles is None:
+        codec_candles = _load_candles(
+            instrument,
+            start=start_dt,
+            end=end_dt,
+            granularity=granularity,
+            cache_path=cache_path,
+        )
+    else:
+        codec_candles = _normalize_to_codec_candles(candles)
+
+    if not codec_candles or len(codec_candles) < window_candles:
+        logger.warning("No live-parity regime manifold candles normalized!")
+        return []
+
+    codec = MarketManifoldCodec(
+        window_candles=window_candles,
+        stride_candles=stride_candles,
+        atr_period=atr_period,
+    )
+    calibrator = HazardCalibrator(percentile=hazard_percentile)
+    encoded_windows = codec.encode(codec_candles, instrument=instrument)
+    signature_history: dict[str, deque[int]] = defaultdict(deque)
+    retention_ms = max(1, int(signature_retention_minutes)) * 60 * 1000
+    admit_labels = {str(label).strip() for label in admit_regimes if str(label).strip()}
+
+    events: List[Dict[str, Any]] = []
+    for window in encoded_windows:
+        hazard_value = float(window.metrics["hazard"])
+        calibrator.update(hazard_value)
+
+        hazard_threshold = calibrator.threshold()
+        if hazard_cap is not None:
+            hazard_threshold = min(hazard_threshold, float(hazard_cap))
+
+        history = signature_history[window.signature]
+        history.append(window.end_ms)
+        while history and (window.end_ms - history[0]) > retention_ms:
+            history.popleft()
+        repetitions = len(history)
+
+        reasons: List[str] = []
+        if hazard_value > hazard_threshold:
+            reasons.append("hazard_exceeds_adaptive_threshold")
+            if hazard_value > hazard_threshold * 1.5:
+                reasons.append("hazard_fallback_requested")
+        if admit_labels and window.canonical.regime not in admit_labels:
+            reasons.append("regime_filtered")
+        if min_confidence > 0.0 and window.canonical.regime_confidence < min_confidence:
+            reasons.append("regime_confidence_low")
+
+        lambda_value = max(0.0, min(1.0, hazard_value * lambda_scale))
+        codec_meta = dict(window.codec_meta)
+        codec_meta["window_candles"] = int(window_candles)
+        codec_meta["stride_candles"] = int(stride_candles)
+        codec_meta["atr_period"] = int(atr_period)
+
+        events.append(
+            {
+                "instrument": instrument.upper(),
+                "ts_ms": window.end_ms,
+                "admit": int(len(reasons) == 0),
+                "direction": _regime_direction_for(window.canonical.regime),
+                "lambda": lambda_value,
+                "hazard": hazard_value,
+                "hazard_threshold": hazard_threshold,
+                "repetitions": repetitions,
+                "repetition_count": repetitions,
+                "structure": {
+                    **window.metrics,
+                    "signature": window.signature,
+                    "hazard": hazard_value,
+                    "lambda_scaled": lambda_value,
+                    "hazard_threshold": hazard_threshold,
+                },
+                "regime": {
+                    "label": window.canonical.regime,
+                    "confidence": window.canonical.regime_confidence,
+                    "realized_vol": window.canonical.realized_vol,
+                    "atr_mean": window.canonical.atr_mean,
+                    "autocorr": window.canonical.autocorr,
+                    "trend_strength": window.canonical.trend_strength,
+                    "volume_zscore": window.canonical.volume_zscore,
+                },
+                "components": {
+                    "bits_b64": window.bits_b64(),
+                    "codec_meta": codec_meta,
+                },
+                "reasons": reasons,
+                "status": "active",
+                "bundle_hits": [],
+                "source": "regime_manifold",
+            }
+        )
+
+    logger.info(
+        "Live-parity regime gate derivation complete. Generated %d windows.",
+        len(events),
+    )
+    return events
+
+
+__all__ = ["derive_signals", "derive_regime_manifold_gates"]

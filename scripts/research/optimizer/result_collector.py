@@ -73,9 +73,11 @@ class ResultCollector:
         end_dt: datetime,
         signal_type: str,
         use_regime: bool,
+        require_st_peak: bool = False,
     ) -> None:
         logger.info(f"Running full simulator export for {instrument}...")
         from scripts.tools.export_optimal_trades import export_single_trade_history
+        from scripts.research.simulator.gate_cache import gate_cache_path_for
 
         params = self.master_config.get(instrument, {}).get(signal_type)
         if not params:
@@ -93,7 +95,7 @@ class ResultCollector:
                 f"[{instrument}] Pre-computing native 200-SMA regime matrix to mirror GPU logic..."
             )
             regime_map = compute_regime_filtering(instrument, start_dt, end_dt)
-            cache_path = Path(f"output/market_data/{instrument}.gates.jsonl")
+            cache_path = gate_cache_path_for(instrument, signal_type)
 
             if cache_path.exists() and regime_map:
                 logger.info(f"Applying regime filter to {cache_path}...")
@@ -166,6 +168,7 @@ class ResultCollector:
                         params,
                         signal_type,
                         use_regime=use_regime,
+                        require_st_peak=require_st_peak,
                     )
                 finally:
                     shutil.move(backup_path, cache_path)
@@ -177,8 +180,15 @@ class ResultCollector:
                     params,
                     signal_type,
                     use_regime=use_regime,
+                    require_st_peak=require_st_peak,
                 )
         else:
             export_single_trade_history(
-                instrument, start_dt, end_dt, params, signal_type, use_regime=use_regime
+                instrument,
+                start_dt,
+                end_dt,
+                params,
+                signal_type,
+                use_regime=use_regime,
+                require_st_peak=require_st_peak,
             )

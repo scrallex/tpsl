@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scripts.trading.exposure_tracker import ExposureTracker
+from scripts.research.simulator.gate_cache import gate_cache_path_for
+from scripts.tools.export_optimal_trades import _build_simulation_params
 from scripts.trading.gate_loader import StrategyInstrument
 from scripts.trading.oanda import OandaConnector
 from scripts.trading.portfolio_manager import PortfolioConfig, PortfolioLoopCoordinator
@@ -260,3 +262,51 @@ def test_oanda_bracket_orders_are_opt_in(monkeypatch):
     assert order["instrument"] == "EUR_USD"
     assert "stopLossOnFill" not in order
     assert "takeProfitOnFill" not in order
+
+
+def test_mean_reversion_uses_dedicated_gate_cache():
+    cache_path = gate_cache_path_for("eur_usd", "mean_reversion")
+    assert cache_path.name == "EUR_USD.mean_reversion.gates.jsonl"
+
+
+def test_export_replay_respects_require_st_peak_flag():
+    payload = {
+        "Haz": 0.82,
+        "Reps": 2,
+        "Hold": 60,
+        "SL": 0.003,
+        "TP": 0.006,
+        "Trail": None,
+        "HazEx": None,
+        "Coh": 0.12,
+        "Ent": 1.1,
+        "Stab": 0.0,
+        "BE": 0.002,
+    }
+
+    disabled = _build_simulation_params(
+        payload,
+        "mean_reversion",
+        ml_primary_gate=False,
+        exposure_scale=0.02,
+        require_st_peak=False,
+    )
+    enabled = _build_simulation_params(
+        payload,
+        "mean_reversion",
+        ml_primary_gate=False,
+        exposure_scale=0.02,
+        require_st_peak=True,
+    )
+
+    assert disabled.st_peak_mode is False
+    assert enabled.st_peak_mode is True
+
+
+def test_full_compose_regime_defaults_match_live_compose():
+    live = Path("/sep/tpsl/docker-compose.live.yml").read_text(encoding="utf-8")
+    full = Path("/sep/tpsl/docker-compose.full.yml").read_text(encoding="utf-8")
+
+    for text in (live, full):
+        assert 'REGIME_WINDOW_CANDLES: "${REGIME_WINDOW_CANDLES:-64}"' in text
+        assert 'REGIME_STRIDE_CANDLES: "${REGIME_STRIDE_CANDLES:-16}"' in text

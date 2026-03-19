@@ -1,4 +1,4 @@
-.PHONY: install frontend-install frontend-build start lint clean build-manifold-engine unified-backtest strategy-yaml strategy-audit strategy-fingerprint parity-check push-config export-optimal-trades deploy-live
+.PHONY: install frontend-install frontend-build start lint clean build-manifold-engine unified-backtest strategy-yaml strategy-audit strategy-fingerprint parity-check push-config export-optimal-trades validate-live-runtime deploy-live
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -12,8 +12,13 @@ STRATEGY_PATH ?= config/mean_reversion_strategy.yaml
 SIGNAL_TYPE ?= mean_reversion
 TARGET ?= http://127.0.0.1:8000/api/strategy/update
 USE_REGIME ?= 0
+PROMOTED_PARAMS_PATH ?= config/live_params.json
+VALIDATION_REDIS_URL ?= redis://localhost:6379/0
+REQUIRE_ST_PEAK ?= 0
 
 REGIME_FLAG := $(if $(filter 1 true yes,$(USE_REGIME)),--use-regime,)
+CANONICAL_JSON_FLAG := $(if $(PROMOTED_PARAMS_PATH),--canonical-json-output $(PROMOTED_PARAMS_PATH),)
+ST_PEAK_FLAG := $(if $(filter 1 true yes,$(REQUIRE_ST_PEAK)),--require-st-peak,)
 
 install:
 	$(PIP) install $(PIP_FLAGS) -r requirements.txt || \
@@ -44,10 +49,10 @@ export-optimal-trades:
 	@$(PYTHON) scripts/tools/export_optimal_trades.py $(ARGS)
 
 strategy-yaml:
-	@$(PYTHON) scripts/tools/json_to_yaml_strategy.py --params-path $(PARAMS_PATH) --output-path $(STRATEGY_PATH) --signal-type $(SIGNAL_TYPE) $(REGIME_FLAG)
+	@PYTHONPATH=. $(PYTHON) scripts/tools/json_to_yaml_strategy.py --params-path $(PARAMS_PATH) --output-path $(STRATEGY_PATH) --signal-type $(SIGNAL_TYPE) $(REGIME_FLAG) $(ST_PEAK_FLAG) $(CANONICAL_JSON_FLAG)
 
 strategy-audit:
-	@$(PYTHON) scripts/tools/audit_live_strategy.py --params-path $(PARAMS_PATH) --strategy-path $(STRATEGY_PATH) --signal-type $(SIGNAL_TYPE) $(REGIME_FLAG)
+	@PYTHONPATH=. $(PYTHON) scripts/tools/audit_live_strategy.py --params-path $(PARAMS_PATH) --strategy-path $(STRATEGY_PATH) --signal-type $(SIGNAL_TYPE) $(REGIME_FLAG) $(ST_PEAK_FLAG)
 
 strategy-fingerprint:
 	@git rev-parse HEAD
@@ -59,6 +64,9 @@ parity-check: strategy-audit strategy-fingerprint
 
 push-config:
 	@$(PYTHON) scripts/tools/push_config.py --payload $(PARAMS_PATH) --target $(TARGET) --signal-type $(SIGNAL_TYPE)
+
+validate-live-runtime:
+	@PYTHONPATH=. $(PYTHON) scripts/tools/validate_live_runtime.py --redis-url $(VALIDATION_REDIS_URL) --strategy-path $(STRATEGY_PATH)
 
 deploy-live:
 	@SEP_DEPLOY_STACK=live ./deploy.sh

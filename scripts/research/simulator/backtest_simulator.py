@@ -340,7 +340,9 @@ class TPSLBacktestSimulator:
             logger.error(message)
             return None
 
-        gates = self.data_adapter.load_gate_events(instrument, start, end)
+        gates = self.data_adapter.load_gate_events(
+            instrument, start, end, signal_type=params.signal_type
+        )
         source = "valkey" if gates else "synthetic"
 
         if not gates:

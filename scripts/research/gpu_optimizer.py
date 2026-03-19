@@ -36,6 +36,12 @@ if __name__ == "__main__":
     parser.add_argument("--max_combinations", type=int, default=5000)
     parser.add_argument("--lookback-days", type=int, default=180)
     parser.add_argument("--use-regime", action="store_true")
+    parser.add_argument(
+        "--require-st-peak",
+        action="store_true",
+        default=False,
+        help="Require st_peak for mean reversion entries (match live require_st_peak YAML setting).",
+    )
     parser.add_argument("--refine", action="store_true")
     parser.add_argument(
         "--min-trades", type=int, default=100, help="Minimum acceptable trade count"
@@ -75,6 +81,7 @@ if __name__ == "__main__":
                 cache,
                 use_regime=args.use_regime,
                 target_signal_type=args.signal_type,
+                require_st_peak=args.require_st_peak,
             )
 
             active = collector.process_stage1_results(
@@ -107,6 +114,7 @@ if __name__ == "__main__":
                     preloaded_data=preloaded,
                     use_regime=args.use_regime,
                     target_signal_type=args.signal_type,
+                    require_st_peak=args.require_st_peak,
                 )
                 active_refine = [r for r in res_refine if r["metrics"]["trades"] > 0]
 
@@ -128,7 +136,12 @@ if __name__ == "__main__":
                 collector.save_winner(inst, active, args.signal_type)
                 if args.export_trades:
                     collector.export_optimal_trades(
-                        inst, start_dt, end_dt, args.signal_type, args.use_regime
+                        inst,
+                        start_dt,
+                        end_dt,
+                        args.signal_type,
+                        args.use_regime,
+                        args.require_st_peak,
                     )
         except Exception as e:
             logger.error(f"Failed {inst}: {e}")

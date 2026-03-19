@@ -10,6 +10,7 @@ Signal-first FX trading system for OANDA majors.
 - `scripts/tools/stream_candles.py`: OANDA candle ingest into Valkey.
 - `scripts/research/gpu_optimizer.py`: GPU-node optimizer and backtest workflow.
 - `config/mean_reversion_strategy.yaml`: live strategy source of truth consumed by the backend.
+- `config/live_params.json`: promoted single-signal params snapshot kept in sync with the active live YAML.
 
 Live flow:
 
@@ -20,7 +21,7 @@ OANDA candles -> stream_candles.py -> Valkey -> manifold/regime gates -> Portfol
 ## Repo Layout
 
 ```text
-config/                 Live profiles, pair metadata, risk config
+config/                 Live profiles, promoted params snapshot, runtime config
 ops/                    Cron, monitoring, and systemd helpers
 scripts/trading/        Live execution path
 scripts/tools/          Runtime and promotion utilities
@@ -94,7 +95,7 @@ curl http://localhost:8000/health
 
 ## Strategy Parity
 
-Strategy parity commands target `output/live_params.json`, which is the optimizer artifact expected during promotion.
+Strategy parity commands target `output/live_params.json`, the optimizer artifact exported by the sweep. Promoted live params are written to `config/live_params.json`.
 
 Audit the active YAML against the params artifact:
 
@@ -145,6 +146,19 @@ make strategy-yaml
 make parity-check
 ```
 
+If you want the live profile to keep structural-tension peak gating enabled during promotion:
+
+```bash
+make strategy-yaml REQUIRE_ST_PEAK=1
+make parity-check REQUIRE_ST_PEAK=1
+```
+
+Validate the live runtime after deployment:
+
+```bash
+make validate-live-runtime VALIDATION_REDIS_URL=redis://localhost:6379/0
+```
+
 Promote the winner over the webhook:
 
 ```bash
@@ -153,7 +167,7 @@ make push-config TARGET=http://127.0.0.1:8000/api/strategy/update
 
 ## Deployment
 
-`deploy.sh` now defaults to the canonical live stack and runs `make parity-check` before building containers.
+`deploy.sh` now defaults to the canonical live stack, runs `make parity-check` before building containers, and validates that streamed candles and gate payloads are present after the stack comes up.
 
 Droplet deploy:
 

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 
+from scripts.trading.live_params import extract_signal_payload
+
 # BacktestRunner missing from codebase
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,22 @@ LIVE_PARAMS_CANDIDATES = (
     Path("output/live_params.json"),
     Path("config/live_params.json"),
 )
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_default(value: Any, default: int) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
 
 
 def compute_week_range() -> Tuple[datetime, datetime]:
@@ -48,7 +66,7 @@ class BacktestManager:
         )
         self.backtest_error_path = self.backtest_results_path.with_suffix(".error.json")
         self.backtest_grid_config = Path(
-            os.getenv("BACKTEST_GRID_CONFIG", "config/backtest_grid.json")
+            os.getenv("BACKTEST_GRID_CONFIG", "output/backtests/grid.json")
         )
 
         self._backtest_lock = threading.Lock()
@@ -216,6 +234,12 @@ class BacktestManager:
                     live_params = json.loads(params_file.read_text())
                 except (json.JSONDecodeError, OSError):
                     pass
+            signal_type = (
+                os.getenv("BACKTEST_SIGNAL_TYPE")
+                or os.getenv("SIGNAL_TYPE")
+                or "mean_reversion"
+            )
+            is_mean_reversion = signal_type == "mean_reversion"
 
             sim = TPSLBacktestSimulator(
                 redis_url=redis_url,
@@ -227,24 +251,39 @@ class BacktestManager:
 
             results_list = []
             for inst in instruments:
-                p = live_params.get(inst, {})
-                sim_params = TPSLSimulationParams(
-                    hazard_override=p.get("hazard_max"),
-                    min_repetitions=p.get("min_repetitions", 1),
-                    hold_minutes=p.get("exit_horizon", 60),
-                    stop_loss_pct=p.get("sl_margin"),
-                    take_profit_pct=p.get("tp_margin"),
-                )
-
-                min_coh = p.get("guards", {}).get("min_coherence")
                 inst_profile = sim.profile.get(inst)
-                if inst_profile and min_coh is not None:
-                    inst_profile.coherence_min = float(min_coh)
+                require_st_peak = bool(
+                    getattr(inst_profile, "require_st_peak", is_mean_reversion)
+                )
+                p = extract_signal_payload(live_params.get(inst, {}), signal_type) or {}
+                sim_params = TPSLSimulationParams(
+                    hazard_override=None if is_mean_reversion else _float_or_none(p.get("Haz")),
+                    hazard_min=_float_or_none(p.get("Haz")) if is_mean_reversion else None,
+                    signal_type=signal_type,
+                    min_repetitions=_int_or_default(p.get("Reps"), 1),
+                    hold_minutes=_int_or_default(p.get("Hold"), 60),
+                    stop_loss_pct=_float_or_none(p.get("SL")),
+                    take_profit_pct=_float_or_none(p.get("TP")),
+                    trailing_stop_pct=_float_or_none(p.get("Trail")),
+                    breakeven_trigger_pct=_float_or_none(p.get("BE")),
+                    hazard_exit_threshold=_float_or_none(p.get("HazEx")),
+                    coherence_threshold=_float_or_none(p.get("Coh")),
+                    entropy_threshold=_float_or_none(p.get("Ent")),
+                    stability_threshold=_float_or_none(p.get("Stab")),
+                    invert_bundles=is_mean_reversion,
+                    st_peak_mode=require_st_peak,
+                )
 
                 cache = Path(f"output/market_data/{inst}.jsonl")
                 sim.cache_path = cache if cache.exists() else None
 
-                res = sim.simulate(inst, start=start, end=end, params=sim_params)
+                res = sim.simulate(
+                    inst,
+                    start=start,
+                    end=end,
+                    params=sim_params,
+                    instrument_profile=inst_profile,
+                )
                 if res:
                     results_list.append(res.to_dict())
 

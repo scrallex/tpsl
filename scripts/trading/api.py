@@ -112,11 +112,12 @@ class TradingAPIHandler(BaseHTTPRequestHandler):
             self._send_json(payload)
             return
         if parsed.path == "/api/regime-map":
-            try:
-                with open("config/regime_mapping.json") as f:
-                    self._send_json(json.load(f))
-            except Exception:
-                self._send_json({"instrument_strategies": {}})
+            payload = (
+                self.svc.strategy_mapping()
+                if self.svc and hasattr(self.svc, "strategy_mapping")
+                else {"instrument_strategies": {}}
+            )
+            self._send_json(payload)
             return
         self._send_json({"error": "not_found"}, status=404)
 
@@ -167,6 +168,7 @@ class TradingAPIHandler(BaseHTTPRequestHandler):
             self._send_json(result or {"ok": False})
             return
         if self.path == "/api/candles/fetch":
+            # Manual refresh endpoint for diagnostics; the live execution path uses streamed S5 candles.
             instrument = payload.get("instrument")
             granularity = payload.get("granularity", "M5")
             count = int(payload.get("count", 200) or 200)

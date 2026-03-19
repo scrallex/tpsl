@@ -102,6 +102,7 @@ def load_data_to_gpu(
     end: datetime,
     cache_path: Optional[Path],
     device: torch.device,
+    target_signal_type: str = "trend_sniper",
 ) -> GpuDataTuple:
     """Loads OHLC + Gates (including Source) into CUDA tensors."""
     logger.info(f"Loading {instrument} data {start.date()} -> {end.date()} to VRAM...")
@@ -161,29 +162,27 @@ def load_data_to_gpu(
     GateSource = torch.zeros(C, dtype=torch.int8, device=device)
 
     market_data_dir = Path("output/market_data")
-    gate_cache = market_data_dir / f"{instrument}.gates.jsonl"
+    try:
+        from scripts.research.simulator.gate_cache import (
+            ensure_historical_gate_cache,
+            gate_cache_path_for,
+        )
 
-    if not gate_cache.exists():
-        logger.info(f"Gate cache {gate_cache.name} missing. Auto-deriving gates...")
-        try:
-            from scripts.research.simulator.signal_deriver import derive_signals
-
-            cache_p = market_data_dir / f"{instrument}.jsonl"
-            gates = derive_signals(
-                instrument,
-                start=start,
-                end=end,
-                granularity="S5",
-                cache_path=cache_p if cache_p.exists() else None,
-            )
-            if gates:
-                gate_cache.parent.mkdir(parents=True, exist_ok=True)
-                with open(gate_cache, "w") as f:
-                    for g in gates:
-                        f.write(json.dumps(g) + "\n")
-                logger.info(f"Saved {len(gates)} synthetic gates to {gate_cache}")
-        except ImportError as e:
-            logger.warning(f"Failed to load derive_signals: {e}")
+        cache_p = market_data_dir / f"{instrument}.jsonl"
+        gate_cache = gate_cache_path_for(
+            instrument, target_signal_type, base_dir=market_data_dir
+        )
+        ensure_historical_gate_cache(
+            instrument,
+            start,
+            end,
+            signal_type=target_signal_type,
+            gate_cache_path=gate_cache,
+            candle_cache_path=cache_p if cache_p.exists() else None,
+        )
+    except ImportError as e:
+        logger.warning(f"Failed to materialize gate cache: {e}")
+        gate_cache = market_data_dir / f"{instrument}.gates.jsonl"
 
     if gate_cache.exists():
         start_ms = to_epoch_ms(start)
