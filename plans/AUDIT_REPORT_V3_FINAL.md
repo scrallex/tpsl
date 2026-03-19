@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-19  
 **Scope:** Full codebase read, every file verified, parity analysis between GPU sweep and live execution  
-**Verdict:** **A new 180-day sweep is required.** Two critical parity gaps make the current parameters unreliable.
+**Verdict:** **A new 180-day sweep is required.** The current live parameters were produced before several critical parity fixes landed.
 
 ---
 
@@ -10,13 +10,14 @@
 
 The V2 cleanup was thorough — dead scripts are removed, `require_st_peak` is configurable end-to-end in the YAML/loader/validator chain, gate rejection counts are in the API and dashboard, and all 7 instruments are correctly wired. The live stack is architecturally sound.
 
-**However, two critical parity gaps mean the current live parameters cannot be trusted:**
+**However, the repo-wide verification found that V3 understated the number of parity gaps:**
 
 | # | Issue | Severity | Location |
 |---|-------|----------|----------|
 | 1 | **GPU sweep hardcodes `g_st_peak[t]` for mean reversion** — parameters were optimized WITH st_peak filtering, but live now runs WITHOUT it | 🔴 CRITICAL | [`gpu_runner.py:198`](scripts/research/optimizer/gpu_runner.py:198) |
 | 2 | **Live codec window/stride overridden to 16/1** in docker-compose, but backtest signal_deriver uses 64/16 — manifold metrics differ 4× | 🔴 CRITICAL | [`docker-compose.live.yml:65-66`](docker-compose.live.yml:65) vs [`signal_deriver.py:186`](scripts/research/simulator/signal_deriver.py:186) |
-| 3 | GPU sweep bypasses source-type filtering with `target_src_code = 0` | 🟡 MEDIUM | [`gpu_runner.py:354`](scripts/research/optimizer/gpu_runner.py:354) |
+| 3 | **Historical mean-reversion gate caches were being generated from sparse `signal_deriver.py` outputs instead of dense live-style `regime_manifold` windows** | 🔴 CRITICAL | [`tensor_builder.py`](scripts/research/optimizer/tensor_builder.py), [`signal_deriver.py`](scripts/research/simulator/signal_deriver.py), [`regime_manifold_service.py`](scripts/trading/regime_manifold_service.py) |
+| 4 | **Post-sweep export still replayed mean reversion with `st_peak` forced on, and `docker-compose.full.yml` still drifted at 16/1** | 🟠 HIGH | [`export_optimal_trades.py`](scripts/tools/export_optimal_trades.py), [`docker-compose.full.yml`](docker-compose.full.yml) |
 
 ### What This Means In Practice
 
@@ -28,7 +29,17 @@ But the live system:
 - **Does NOT** require `st_peak` (YAML says `require_st_peak: false`)
 - **Generates** gates using a 16-candle / 1-stride codec window (80 seconds of price context)
 
-This means the hazard/coherence/entropy threshold values found by the sweep describe a **different statistical regime** than what the live system produces. The live system will enter trades the sweep never tested.
+This means the hazard/coherence/entropy threshold values found by the sweep describe a **different statistical regime** than what the live system produces. Before the fixes, the mean-reversion sweep also consumed a different historical gate population than live because it read sparse synthetic gate caches rather than dense `regime_manifold` windows.
+
+### Amendment After Implementation Review
+
+The code review after V3 found four material corrections:
+
+1. The recommended `& (g_st_peak[t] | ~require_st_peak)` expression is unsafe for a Python/TorchScript `bool`; use an explicit `if require_st_peak` branch instead.
+2. `scripts/tools/export_optimal_trades.py` still hardcoded `st_peak_mode=True` for mean reversion, so exported trade traces could still diverge from live even after the GPU sweep was fixed.
+3. `docker-compose.full.yml` still overrode the regime service to `16/1`, so the documented "full" stack was not actually a parity-preserving alias of the live stack.
+4. `run_gpu_parity_replay()` still loaded gates without threading `params.signal_type`, so replay/export could silently fall back to the generic cache instead of the dedicated mean-reversion cache.
+5. The old "source tag bypass" finding was understated: the problem was not merely a tag mismatch. The historical mean-reversion sweep was building/reading the wrong gate cache shape. This is now fixed with a dedicated live-parity cache path: `output/market_data/<PAIR>.mean_reversion.gates.jsonl`.
 
 ---
 
@@ -65,7 +76,27 @@ With `require_st_peak: false` in the YAML, this check is SKIPPED live. **The swe
 Make `g_st_peak[t]` conditional in the GPU runner. Since `_process_timeline` is a `@torch.jit.script` function, pass the flag as a `bool` parameter (TorchScript supports primitive bools):
 
 1. Add `require_st_peak: bool` to the `_process_timeline` signature (after `is_mean_reversion: bool` at line 67)
-2. Change line 198 to: `& (g_st_peak[t] | ~require_st_peak)`
+2. Change the mean-reversion branch to explicit conditional logic:
+
+```python
+if require_st_peak:
+    valid_gate = (
+        (gate_hz >= arr_haz)
+        & (gate_rp >= arr_reps)
+        & (gate_co >= arr_coh)
+        & (gate_st >= arr_stab)
+        & (gate_en <= arr_ent)
+        & g_st_peak[t]
+    )
+else:
+    valid_gate = (
+        (gate_hz >= arr_haz)
+        & (gate_rp >= arr_reps)
+        & (gate_co >= arr_coh)
+        & (gate_st >= arr_stab)
+        & (gate_en <= arr_ent)
+    )
+```
 3. Thread `require_st_peak` through `GpuBacktestRunner.execute_gpu_sweep()` → `_process_timeline()` call site (line 403)
 4. In [`run_full_sweep.sh`](run_full_sweep.sh), add `--require-st-peak` to the `optimizer_cmd` block in `run_window_sweep()` when `REQUIRE_ST_PEAK=1` — currently `REQUIRE_ST_PEAK` is only forwarded to `json_to_yaml_strategy.py` and `audit_live_strategy.py`, **not to `gpu_optimizer.py`**
 
@@ -115,7 +146,7 @@ Change [`signal_deriver.py:186`](scripts/research/simulator/signal_deriver.py:18
 
 ---
 
-## MEDIUM ISSUE: GPU Source-Type Filter Bypass
+## CRITICAL ISSUE 3: Historical Mean-Reversion Gate Cache Mismatch
 
 ### The Problem
 
@@ -124,17 +155,21 @@ In [`gpu_runner.py:354`](scripts/research/optimizer/gpu_runner.py:354):
 target_src_code = 0  # Bypass exact string matching constraints.
 ```
 
-This means the GPU sweep accepts gates from ALL sources (structural_extension, squeeze_breakout, etc.), while the live regime service only produces `source: "regime_manifold"` gates.
+The original V3 write-up treated this as a source-label issue. The deeper problem is the historical cache materialization path:
 
-The `signal_deriver.py` generates gates tagged as `structural_extension` and `squeeze_breakout`. With `target_src_code = 0`, the GPU tests ALL of them together. The live system only sees `regime_manifold` gates.
+- The GPU/replay stack historically populated `output/market_data/<PAIR>.gates.jsonl` via `signal_deriver.py`, which emits sparse `structural_extension` / `squeeze_breakout` events.
+- The live system does **not** trade those sparse synthetic events. It trades dense `regime_manifold` windows written by [`regime_manifold_service.py`](scripts/trading/regime_manifold_service.py), and then applies live gate validation on top.
 
-### Why This Is Medium, Not Critical
-
-The gate payloads from `regime_manifold` vs `signal_deriver` share the same metric space (hazard, coherence, entropy, repetitions). The parameter bounds that filter trades operate on these metrics regardless of source tag. The source tag just indicates the generation pathway. As long as the codec produces the same metric values (which depends on Issue 2 being fixed), the source tag doesn't affect trade selection.
+That means the sweep was not just accepting the wrong `source` tag. It was optimizing against the wrong **historical gate population** for mean reversion.
 
 ### The Fix
 
-No code change needed for source filtering. Once Issue 2 is resolved, the metric values will be in parity and the source tag is informational only.
+- Keep the generic `output/market_data/<PAIR>.gates.jsonl` cache for legacy/synthetic research flows.
+- Materialize a dedicated live-parity mean-reversion cache at `output/market_data/<PAIR>.mean_reversion.gates.jsonl`.
+- Build that dedicated cache from the same dense `regime_manifold` codec windows the live service uses, with explicit `window_candles=64` / `stride_candles=16` metadata baked into the cached payload.
+- Point the GPU optimizer, replay/export path, and backtest adapter at the dedicated mean-reversion cache when `signal_type == "mean_reversion"`.
+
+Once this is in place, mean-reversion sweeps and exports consume the same class of historical gates as live.
 
 ---
 
@@ -277,7 +312,11 @@ Three touch-points:
 & g_st_peak[t]
 
 # After:
-& (g_st_peak[t] | ~require_st_peak)
+if require_st_peak:
+    ...
+    & g_st_peak[t]
+else:
+    ...
 ```
 
 **c) `_process_timeline` call site** (line 403) — pass the new argument:

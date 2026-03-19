@@ -1,0 +1,228 @@
+# Repository File Necessity Audit
+
+Generated from the tracked-file set on 2026-03-19 after reading the repo and re-checking parity-sensitive paths.
+
+## Summary
+- KEEP-LIVE: 50
+- KEEP-RESEARCH: 78
+- KEEP-FRONTEND: 32
+- KEEP-SUPPORT: 38
+- REMOVE-CANDIDATE: 2
+- TOTAL TRACKED FILES: 200
+
+## Classification Rules
+- `KEEP-LIVE`: directly participates in live trading, live deployment, or live operational support.
+- `KEEP-RESEARCH`: optimization, audit, export, analytics, and historical simulation paths.
+- `KEEP-FRONTEND`: dashboard/UI assets and frontend delivery config.
+- `KEEP-SUPPORT`: build, docs, tests, shared infrastructure, and repo plumbing that supports the above.
+- `REMOVE-CANDIDATE`: appears redundant or currently unreferenced; safe to review for deletion, but not removed automatically.
+
+## KEEP-LIVE
+- `config/live_params.json`
+- `config/mean_reversion_strategy.yaml`
+- `docker-compose.full.yml`
+- `docker-compose.live.yml`
+- `ops/cron/backfill_candles.sh`
+- `ops/cron/gate_freshness.sh`
+- `ops/cron/gate_freshness_to_slack.sh`
+- `ops/systemd/sep-backfill.service`
+- `ops/systemd/sep-data-downloader.service`
+- `ops/systemd/sep-manifold.service`
+- `scripts/trading/__init__.py`
+- `scripts/trading/api.py`
+- `scripts/trading/api_serializers.py`
+- `scripts/trading/backtest_manager.py`
+- `scripts/trading/candle_parser.py`
+- `scripts/trading/candle_utils.py`
+- `scripts/trading/circuit_breaker.py`
+- `scripts/trading/env_loader.py`
+- `scripts/trading/evidence_cache.py`
+- `scripts/trading/execution_engine.py`
+- `scripts/trading/exposure_tracker.py`
+- `scripts/trading/gate_loader.py`
+- `scripts/trading/gate_validation.py`
+- `scripts/trading/guards.py`
+- `scripts/trading/live_params.py`
+- `scripts/trading/log_formatters.py`
+- `scripts/trading/market_types.py`
+- `scripts/trading/ml_evaluator.py`
+- `scripts/trading/oanda.py`
+- `scripts/trading/portfolio_manager.py`
+- `scripts/trading/position_tracker.py`
+- `scripts/trading/pricing_cache.py`
+- `scripts/trading/pricing_utils.py`
+- `scripts/trading/regime_manifold_service.py`
+- `scripts/trading/retry_utils.py`
+- `scripts/trading/risk_calculator.py`
+- `scripts/trading/risk_limits.py`
+- `scripts/trading/session_policy.py`
+- `scripts/trading/state_manager.py`
+- `scripts/trading/structural_circuit_breaker.py`
+- `scripts/trading/tpsl/__init__.py`
+- `scripts/trading/tpsl/checker.py`
+- `scripts/trading/tpsl/config.py`
+- `scripts/trading/tpsl/state.py`
+- `scripts/trading/tpsl/store.py`
+- `scripts/trading/trade_planner.py`
+- `scripts/trading/trade_records.py`
+- `scripts/trading/trade_stack.py`
+- `scripts/trading/trade_state.py`
+- `scripts/trading_service.py`
+
+## KEEP-RESEARCH
+- `config/optimization_smart_sweep.yaml`
+- `config/optimization_space.yaml`
+- `plans/AUDIT_REPORT_V3_FINAL.md`
+- `run_full_sweep.sh`
+- `scripts/research/__init__.py`
+- `scripts/research/bundle_rules.py`
+- `scripts/research/data_store.py`
+- `scripts/research/generate_report.py`
+- `scripts/research/gpu_optimizer.py`
+- `scripts/research/ml_train.py`
+- `scripts/research/optimizer/debug_runner.py`
+- `scripts/research/optimizer/gpu_runner.py`
+- `scripts/research/optimizer/parameter_grid.py`
+- `scripts/research/optimizer/result_collector.py`
+- `scripts/research/optimizer/result_parser.py`
+- `scripts/research/optimizer/tensor_builder.py`
+- `scripts/research/regime_manifold/__init__.py`
+- `scripts/research/regime_manifold/codec_analytics.py`
+- `scripts/research/regime_manifold/decoder.py`
+- `scripts/research/regime_manifold/encoder.py`
+- `scripts/research/regime_manifold/regime_math.py`
+- `scripts/research/regime_manifold/types.py`
+- `scripts/research/roc_utils.py`
+- `scripts/research/s5_alignment_test.py`
+- `scripts/research/simulator/__init__.py`
+- `scripts/research/simulator/backtest_simulator.py`
+- `scripts/research/simulator/data_adapter.py`
+- `scripts/research/simulator/dataset_loader.py`
+- `scripts/research/simulator/direction_evaluator.py`
+- `scripts/research/simulator/gate_cache.py`
+- `scripts/research/simulator/gpu_parity_replay.py`
+- `scripts/research/simulator/metrics.py`
+- `scripts/research/simulator/metrics_calculator.py`
+- `scripts/research/simulator/models/__init__.py`
+- `scripts/research/simulator/models/candle.py`
+- `scripts/research/simulator/models/params.py`
+- `scripts/research/simulator/models/records.py`
+- `scripts/research/simulator/pending_trigger.py`
+- `scripts/research/simulator/pricing_utils.py`
+- `scripts/research/simulator/replay_candle_processor.py`
+- `scripts/research/simulator/signal_deriver.py`
+- `scripts/research/simulator/signal_matching.py`
+- `scripts/research/simulator/st_filter.py`
+- `scripts/research/simulator/synthetic_m1.py`
+- `scripts/research/simulator/tracker.py`
+- `scripts/research/simulator/v4_gates.py`
+- `scripts/research/simulator/v8_gates.py`
+- `scripts/research/test_direction_correlation.py`
+- `scripts/research/validate_signals.py`
+- `scripts/research/visualize_profit_smile.py`
+- `scripts/tools/__init__.py`
+- `scripts/tools/analyze_blind_spots.py`
+- `scripts/tools/audit_live_strategy.py`
+- `scripts/tools/audit_mean_reversion.py`
+- `scripts/tools/auto_backfill_watcher.py`
+- `scripts/tools/backfill_candles.py`
+- `scripts/tools/build_features.py`
+- `scripts/tools/build_manifold_engine.sh`
+- `scripts/tools/build_synthetic_m1_dataset.py`
+- `scripts/tools/check_aux_keys.py`
+- `scripts/tools/cli_runner.py`
+- `scripts/tools/export_optimal_trades.py`
+- `scripts/tools/health_check_service.py`
+- `scripts/tools/json_cache.py`
+- `scripts/tools/json_encoders.py`
+- `scripts/tools/json_to_yaml_strategy.py`
+- `scripts/tools/manage_manifolds.py`
+- `scripts/tools/optimize_single_instrument.py`
+- `scripts/tools/profile_instrument_regimes.py`
+- `scripts/tools/push_config.py`
+- `scripts/tools/repair_history.py`
+- `scripts/tools/seed_valkey_defaults.py`
+- `scripts/tools/serialization_mixin.py`
+- `scripts/tools/signal_analytics.py`
+- `scripts/tools/stream_candles.py`
+- `scripts/tools/time_utils.py`
+- `scripts/tools/validate_live_runtime.py`
+- `scripts/tools/validate_optimization_results.py`
+
+## KEEP-FRONTEND
+- `apps/README.md`
+- `apps/frontend/.eslintrc.js`
+- `apps/frontend/.prettierrc`
+- `apps/frontend/Dockerfile`
+- `apps/frontend/README.md`
+- `apps/frontend/docker-entrypoint.sh`
+- `apps/frontend/index.html`
+- `apps/frontend/nginx.conf`
+- `apps/frontend/nginx.d/default.conf`
+- `apps/frontend/nginx.global.conf`
+- `apps/frontend/nginx.local.conf`
+- `apps/frontend/nginx.local.tmpl.conf`
+- `apps/frontend/nginx.tmpl.conf`
+- `apps/frontend/nginx/includes/api_proxy.conf`
+- `apps/frontend/nginx/includes/cache_static.conf`
+- `apps/frontend/nginx/includes/health.conf`
+- `apps/frontend/nginx/includes/react_router.conf`
+- `apps/frontend/nginx/includes/security_headers_http.conf`
+- `apps/frontend/nginx/includes/security_headers_https.conf`
+- `apps/frontend/nginx/includes/ws_proxy.conf`
+- `apps/frontend/package.json`
+- `apps/frontend/pnpm-lock.yaml`
+- `apps/frontend/public/sep-config.js`
+- `apps/frontend/public/static/sep.openapi.yaml`
+- `apps/frontend/src/App.tsx`
+- `apps/frontend/src/index.css`
+- `apps/frontend/src/main.tsx`
+- `apps/frontend/src/pages/LiveConsole/LiveConsole.css`
+- `apps/frontend/src/pages/LiveConsole/LiveConsole.tsx`
+- `apps/frontend/src/types/api.d.ts`
+- `apps/frontend/tsconfig.json`
+- `apps/frontend/vite.config.ts`
+
+## KEEP-SUPPORT
+- `.dockerignore`
+- `.flake8`
+- `.gitignore`
+- `CMakeLists.txt`
+- `Dockerfile.backend`
+- `Makefile`
+- `README.md`
+- `cmake/FindAsio.cmake`
+- `cmake/fix_nlohmann_serializer.sh`
+- `cmake/global_includes.h`
+- `cmake/gtest.cmake`
+- `cmake/nlohmann_json_patch.cmake`
+- `cmake/template.cmake`
+- `config/pip_scales.json`
+- `deploy.sh`
+- `ops/monitoring/alerts/sep_regime.rules.yml`
+- `ops/monitoring/prometheus_regime.yml`
+- `pytest.ini`
+- `requirements.txt`
+- `scripts/__init__.py`
+- `src/CMakeLists.txt`
+- `src/core/bindings.cpp`
+- `src/core/byte_stream_manifold.cpp`
+- `src/core/byte_stream_manifold.h`
+- `src/core/forward_window_result.h`
+- `src/core/io_utils.cpp`
+- `src/core/io_utils.h`
+- `src/core/manifold_builder.cpp`
+- `src/core/manifold_builder.h`
+- `src/core/oanda_client.cpp`
+- `src/core/oanda_client.h`
+- `src/core/standard_includes.h`
+- `src/core/structural_entropy.cpp`
+- `src/core/structural_entropy.h`
+- `src/core/trading_signals.cpp`
+- `src/core/trading_signals.h`
+- `src/core/trajectory.h`
+- `tests/test_live_alignment.py`
+
+## REMOVE-CANDIDATE
+- `cmake/template_backup.cmake`: Backup copy of cmake template; no repo references.
+- `config/telemetry.yaml`: Telemetry config is not referenced by the live, research, or frontend paths.

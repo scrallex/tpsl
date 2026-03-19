@@ -7,7 +7,13 @@ from types import SimpleNamespace
 
 from scripts.trading.exposure_tracker import ExposureTracker
 from scripts.research.simulator.gate_cache import gate_cache_path_for
+from scripts.research.simulator.gpu_parity_replay import (
+    replay_gpu_parity,
+    run_gpu_parity_replay,
+)
+from scripts.research.simulator.backtest_simulator import _structured_sources_for
 from scripts.tools.export_optimal_trades import _build_simulation_params
+from scripts.research.simulator.models import OHLCCandle, TPSLSimulationParams
 from scripts.trading.gate_loader import StrategyInstrument
 from scripts.trading.oanda import OandaConnector
 from scripts.trading.portfolio_manager import PortfolioConfig, PortfolioLoopCoordinator
@@ -301,6 +307,121 @@ def test_export_replay_respects_require_st_peak_flag():
 
     assert disabled.st_peak_mode is False
     assert enabled.st_peak_mode is True
+
+
+def test_gpu_parity_replay_respects_st_peak_mode():
+    start = datetime(2026, 3, 18, 19, 40, tzinfo=timezone.utc)
+    candles = [
+        OHLCCandle(time=start, open=1.0000, high=1.0002, low=0.9998, close=1.0000),
+        OHLCCandle(
+            time=start.replace(second=5),
+            open=1.0000,
+            high=1.0002,
+            low=0.9985,
+            close=0.9990,
+        ),
+    ]
+    gates = [
+        {
+            "ts_ms": int(start.timestamp() * 1000),
+            "direction": "BUY",
+            "hazard": 0.82,
+            "repetitions": 2,
+            "components": {
+                "coherence": 0.12,
+                "stability": 0.2,
+                "entropy": 1.1,
+            },
+            "source": "regime_manifold",
+        }
+    ]
+
+    disabled = replay_gpu_parity(
+        instrument="EUR_USD",
+        candles=candles,
+        gates=gates,
+        params=TPSLSimulationParams(
+            signal_type="mean_reversion",
+            hazard_min=0.80,
+            min_repetitions=1,
+            take_profit_pct=0.0005,
+            exposure_scale=0.02,
+            st_peak_mode=False,
+        ),
+        nav=100_000.0,
+        nav_risk_pct=0.01,
+        per_position_pct_cap=0.01,
+        cost_bps=1.5,
+    )
+    enabled = replay_gpu_parity(
+        instrument="EUR_USD",
+        candles=candles,
+        gates=gates,
+        params=TPSLSimulationParams(
+            signal_type="mean_reversion",
+            hazard_min=0.80,
+            min_repetitions=1,
+            take_profit_pct=0.0005,
+            exposure_scale=0.02,
+            st_peak_mode=True,
+        ),
+        nav=100_000.0,
+        nav_risk_pct=0.01,
+        per_position_pct_cap=0.01,
+        cost_bps=1.5,
+    )
+
+    assert len(disabled.trades) == 1
+    assert len(enabled.trades) == 0
+
+
+def test_run_gpu_parity_replay_passes_signal_type_to_gate_loader(monkeypatch):
+    captured = {}
+    start = datetime(2026, 3, 18, 19, 40, tzinfo=timezone.utc)
+
+    class _Adapter:
+        def __init__(self, redis_url=None, granularity="S5") -> None:
+            self.redis_url = redis_url
+            self.granularity = granularity
+
+        def load_ohlc_candles(self, instrument, start_dt, end_dt):
+            return [
+                OHLCCandle(
+                    time=start,
+                    open=1.0,
+                    high=1.0,
+                    low=1.0,
+                    close=1.0,
+                )
+            ]
+
+        def load_gate_events(self, instrument, start_dt, end_dt, signal_type=None):
+            captured["signal_type"] = signal_type
+            return []
+
+    monkeypatch.setattr(
+        "scripts.research.simulator.gpu_parity_replay.BacktestDataAdapter",
+        _Adapter,
+    )
+
+    result = run_gpu_parity_replay(
+        instrument="EUR_USD",
+        start=start,
+        end=start,
+        params=TPSLSimulationParams(signal_type="mean_reversion"),
+        nav=100_000.0,
+        nav_risk_pct=0.01,
+        per_position_pct_cap=0.01,
+        cost_bps=1.5,
+    )
+
+    assert result is None
+    assert captured["signal_type"] == "mean_reversion"
+
+
+def test_backtest_structured_source_filter_accepts_regime_manifold():
+    assert "regime_manifold" in _structured_sources_for("mean_reversion")
+    assert "regime_manifold" in _structured_sources_for("trend_sniper")
 
 
 def test_full_compose_regime_defaults_match_live_compose():

@@ -9,7 +9,7 @@ from scripts.research.data_store import parse
 S5_REVERSAL_WINDOW_MS = 60000
 
 
-def test_s5_alignment(instrument):
+def run_s5_alignment(instrument):
     triggers_path = Path(f"output/{instrument.lower()}_m1_triggers.json")
     if not triggers_path.exists():
         print(f"No triggers found at {triggers_path}")
@@ -112,4 +112,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument", type=str, default="EUR_USD")
     args = parser.parse_args()
-    test_s5_alignment(args.instrument)
+    run_s5_alignment(args.instrument)

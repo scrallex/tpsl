@@ -9,10 +9,15 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from scipy.stats import pearsonr, spearmanr
 
 
 def main():
+    try:
+        from scipy.stats import pearsonr, spearmanr
+    except ImportError:
+        print("scipy is required to run this research script.")
+        return
+
     instrument = "USD_JPY"
     market_path = Path(f"output/market_data/{instrument}.jsonl")
     gates_path = Path(f"output/market_data/{instrument}.gates.jsonl")

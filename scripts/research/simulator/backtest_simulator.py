@@ -93,6 +93,19 @@ except ImportError:
 
 
 UTC = timezone.utc
+_CORE_STRUCTURED_SOURCES = {
+    "structural_extension",
+    "squeeze_breakout",
+    "trend_sniper",
+    "regime_manifold",
+}
+
+
+def _structured_sources_for(target_source: str) -> set[str]:
+    normalized = str(target_source or "").strip().lower()
+    if normalized in ("trend_sniper", "mean_reversion", "squeeze_breakout"):
+        return set(_CORE_STRUCTURED_SOURCES)
+    return {normalized} if normalized else set()
 
 
 # =========================================================================
@@ -384,19 +397,18 @@ class TPSLBacktestSimulator:
 
         if params.signal_type:
             target_source = params.signal_type.lower()
-            
-            # To mirror the GPU bypass (target_src_code=0), we allow ANY structured source 
-            # if the target_source is one of the core types.
-            if target_source in ("trend_sniper", "mean_reversion", "squeeze_breakout"):
-                valid_sources = {"structural_extension", "squeeze_breakout", "trend_sniper"}
+
+            # Mirror the GPU bypass (target_src_code=0): the structured strategy
+            # families share the same metric space, so source labels are only used
+            # to exclude obviously unrelated payloads.
+            valid_sources = _structured_sources_for(target_source)
+            if valid_sources:
                 gates = [
-                    g for g in gates if str(g.get("source", "")).lower() in valid_sources
+                    g
+                    for g in gates
+                    if str(g.get("source", "")).strip().lower() in valid_sources
                 ]
-            else:
-                effective_source = target_source
-                gates = [
-                    g for g in gates if str(g.get("source", "")).lower() == effective_source
-                ]
+            effective_source = target_source
 
             if target_source == "mean_reversion":
                 for g in gates:

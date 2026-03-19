@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from scripts.trading.candle_utils import to_epoch_ms
 
+import json
 import math
 from bisect import insort
 from collections import defaultdict, deque
@@ -134,6 +135,31 @@ def _load_candles(
     granularity: str = "S5",
     cache_path: Optional[Path] = None,
 ) -> List[Candle]:
+    if cache_path and cache_path.exists():
+        cached_rows: List[Dict[str, Any]] = []
+        try:
+            with cache_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    ts_raw = row.get("time")
+                    if not ts_raw:
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(
+                            str(ts_raw).replace("Z", "+00:00")
+                        ).astimezone(UTC)
+                    except Exception:
+                        continue
+                    if start <= ts <= end:
+                        cached_rows.append(row)
+        except Exception:
+            cached_rows = []
+
+        if cached_rows:
+            return _normalize_to_codec_candles(cached_rows)
+
     payload = []
     if cache_path:
         try:

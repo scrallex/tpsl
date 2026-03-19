@@ -20,7 +20,8 @@ UTC = timezone.utc
 SOURCE_MAP = {
     "trend_sniper": 1,
     "structural_extension": 1,
-    "regime_manifold_codec": 1,
+    "regime_manifold_codec": 3,
+    "regime_manifold": 3,
     "squeeze_breakout": 2,
     "mean_reversion": 3,
     "manual": 0,

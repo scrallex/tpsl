@@ -355,7 +355,7 @@ def replay_gpu_parity(
                 gate_valid = bool(gate["_gpu_stab"] >= float(params.stability_threshold))
             if gate_valid and params.entropy_threshold is not None:
                 gate_valid = bool(gate["_gpu_ent"] <= float(params.entropy_threshold))
-            if gate_valid and use_mean_reversion:
+            if gate_valid and use_mean_reversion and params.st_peak_mode:
                 gate_valid = bool(gate["_gpu_st_peak"])
 
             signed_open_units = sum(slot.direction for slot in slots if slot is not None)
@@ -432,7 +432,12 @@ def run_gpu_parity_replay(
     candles = adapter.load_ohlc_candles(instrument, start, end)
     if not candles:
         return None
-    gates = adapter.load_gate_events(instrument, start, end)
+    gates = adapter.load_gate_events(
+        instrument,
+        start,
+        end,
+        signal_type=params.signal_type,
+    )
     if not gates:
         return None
     return replay_gpu_parity(
