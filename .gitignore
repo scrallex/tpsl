@@ -7,10 +7,7 @@ cpr/
 .venv*/
 data_snapshot/
 output/*
-!output/models/
-!output/models/*
-!output/ml_data/
-!output/ml_data/*
+
 # tools/ - DO NOT IGNORE: scripts/tools/ contains essential utilities
 output/backtests/
 output/trades/*
@@ -92,6 +89,11 @@ data/
 # Logs and output
 *.log
 output/*
+!output/live_params.json
+!output/models/
+!output/models/*
+!output/ml_data/
+!output/ml_data/*
 logs/
 **/logs/
 # apps/ - DO NOT IGNORE: apps/frontend is required for the dashboard

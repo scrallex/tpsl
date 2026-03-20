@@ -27,6 +27,9 @@ REBUILD_ML="${REBUILD_ML:-auto}"
 REFINE_SWEEP="${REFINE_SWEEP:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 EXPORT_ONLY="${EXPORT_ONLY:-0}"
+VALIDATE_WINDOWS_ONLY="${VALIDATE_WINDOWS_ONLY:-0}"
+CANONICAL_WINDOW="${CANONICAL_WINDOW:-180}"
+CANONICAL_PARAMS_PATH="${CANONICAL_PARAMS_PATH:-}"
 GENERATE_LIVE_PROFILE="${GENERATE_LIVE_PROFILE:-1}"
 AUDIT_LIVE_PROFILE="${AUDIT_LIVE_PROFILE:-1}"
 LIVE_PROFILE_PATH="${LIVE_PROFILE_PATH:-config/mean_reversion_strategy.yaml}"
@@ -100,6 +103,16 @@ copy_window_trades() {
             cp "$src" "$window_dir/"
         fi
     done
+}
+
+promote_canonical_params() {
+    local params_file="$1"
+
+    echo "=================================================="
+    echo "Phase 3: Promote Canonical Live Params"
+    echo "=================================================="
+
+    run_cmd cp "$params_file" output/live_params.json
 }
 
 run_window_sweep() {
@@ -319,14 +332,40 @@ echo "Signal type: ${SIGNAL_TYPE}"
 echo "Use regime filter: ${USE_REGIME}"
 echo "Require st_peak: ${REQUIRE_ST_PEAK}"
 echo "Export only: ${EXPORT_ONLY}"
+echo "Validate windows only: ${VALIDATE_WINDOWS_ONLY}"
 echo "ML primary gate: ${ML_PRIMARY_GATE}"
+
+if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
+    if [[ -z "$CANONICAL_PARAMS_PATH" ]]; then
+        CANONICAL_PARAMS_PATH="output/${CANONICAL_WINDOW}day/live_params.json"
+    fi
+    if [[ ! -f "$CANONICAL_PARAMS_PATH" ]]; then
+        echo "Missing canonical params file for validation mode: ${CANONICAL_PARAMS_PATH}" >&2
+        exit 1
+    fi
+    EXPORT_ONLY=1
+    EXPORT_PARAMS_PATH="$CANONICAL_PARAMS_PATH"
+    if [[ -z "$EXPORT_END_TIME" ]]; then
+        EXPORT_END_TIME="$("$PYTHON_BIN" - <<'PY'
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
+PY
+)"
+    fi
+    echo "Canonical params path: ${CANONICAL_PARAMS_PATH}"
+    echo "Pinned validation end time: ${EXPORT_END_TIME}"
+fi
 
 if [[ "$EXPORT_ONLY" != "1" ]]; then
     for days in "${WINDOWS[@]}"; do
         run_window_sweep "$days"
     done
 else
-    echo "Skipping GPU optimization sweep; exporting from existing window params."
+    if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
+        echo "Skipping GPU optimization sweep; exporting validation windows from canonical params."
+    else
+        echo "Skipping GPU optimization sweep; exporting from existing window params."
+    fi
     if [[ -z "$EXPORT_PARAMS_PATH" && -f "output/live_params.json" ]]; then
         EXPORT_PARAMS_PATH="output/live_params.json"
     fi
@@ -347,7 +386,11 @@ for days in "${WINDOWS[@]}"; do
     export_window_trades "$days"
 done
 
-restore_baseline_outputs "${WINDOWS[0]}"
+if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
+    promote_canonical_params "$EXPORT_PARAMS_PATH"
+else
+    restore_baseline_outputs "${WINDOWS[0]}"
+fi
 
 if [[ "$GENERATE_LIVE_PROFILE" == "1" ]]; then
     generate_live_profile
@@ -358,9 +401,17 @@ if [[ "$AUDIT_LIVE_PROFILE" == "1" ]]; then
 fi
 
 echo "=================================================="
-echo "Sweep and export complete."
+if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
+    echo "Canonical validation exports complete."
+else
+    echo "Sweep and export complete."
+fi
 echo "Window outputs are in: $(printf 'output/%sday ' "${WINDOWS[@]}")"
-echo "Baseline output/live_params.json restored from ${WINDOWS[0]}-day sweep."
+if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
+    echo "Canonical output/live_params.json promoted from ${EXPORT_PARAMS_PATH}."
+else
+    echo "Baseline output/live_params.json restored from ${WINDOWS[0]}-day sweep."
+fi
 if [[ "$GENERATE_LIVE_PROFILE" == "1" ]]; then
     echo "Live profile updated at: ${LIVE_PROFILE_PATH}"
     echo "Promoted live params snapshot updated at: ${CANONICAL_LIVE_PARAMS_PATH}"
