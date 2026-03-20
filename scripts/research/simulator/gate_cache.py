@@ -16,7 +16,10 @@ from scripts.research.simulator.signal_deriver import (
 logger = logging.getLogger(__name__)
 
 _DEFAULT_WINDOW_CANDLES = 64
-_DEFAULT_STRIDE_CANDLES = 16
+# Live now emits the most recent 64-candle manifold on every completed S5
+# candle. Historical mean-reversion caches must therefore materialize rolling
+# windows instead of 16-candle boundary snapshots.
+_DEFAULT_STRIDE_CANDLES = 1
 
 
 def gate_cache_path_for(

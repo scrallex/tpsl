@@ -594,7 +594,6 @@ class TradingService:
         if not self.running:
             return
         self.running = False
-        self.set_kill_switch(True)
         self.portfolio_manager.stop()
         if self._api_server:
             try:

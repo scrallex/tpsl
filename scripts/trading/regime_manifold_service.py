@@ -129,6 +129,7 @@ class RegimeManifoldService:
             inst: HazardCalibrator(percentile=config.hazard_percentile)
             for inst in config.instruments
         }
+        self._last_emitted_ts_ms: Dict[str, int] = {}
 
         self._stop = False
         disable_metrics = str(os.getenv("DISABLE_REGIME_METRICS", "0")).lower() in (
@@ -208,7 +209,12 @@ class RegimeManifoldService:
         if len(candles) < self.codec.window_candles:
             logger.debug("insufficient candles for %s (%d)", instrument, len(candles))
             return
-        windows = self.codec.encode(candles, instrument=instrument, return_only_latest=True)
+        windows = self.codec.encode(
+            candles,
+            instrument=instrument,
+            return_only_latest=True,
+            align_latest_to_stride=False,
+        )
         if not windows:
             return
         window = windows[-1]
@@ -217,6 +223,13 @@ class RegimeManifoldService:
         self.metric_age.labels(instrument=instrument).set(
             self._candle_age_seconds(window)
         )
+
+        # Emit at most once per completed S5 candle. The loop runs every 2s, so
+        # without this guard the same structural window would be re-counted and
+        # re-written several times before the next candle closes.
+        window_end_ms = int(window.end_ms)
+        if self._last_emitted_ts_ms.get(instrument) == window_end_ms:
+            return
 
         calibrator = self._hazard_calibrators[instrument]
         calibrator.update(hazard_value)
@@ -273,6 +286,7 @@ class RegimeManifoldService:
         payload["trap_door_low"] = trap_door_low
 
         self._write_gate(instrument, payload)
+        self._last_emitted_ts_ms[instrument] = window_end_ms
         self.metric_payloads.labels(
             instrument=instrument,
             regime=window.canonical.regime,

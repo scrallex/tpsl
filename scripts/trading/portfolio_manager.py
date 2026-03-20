@@ -350,7 +350,6 @@ class PortfolioLoopCoordinator:
 
         prices = self.exposure_tracker.fetch_prices(self.enabled_instruments)
         nav_snapshot = self.exposure_tracker.nav_snapshot()
-        caps = self.risk_sizer.compute_caps(nav_snapshot)
         notional_caps = self.risk_sizer.compute_notional_caps(
             nav_snapshot, exposure_scale=self.exposure_scale
         )
@@ -374,7 +373,7 @@ class PortfolioLoopCoordinator:
 
         now_ts = time.time()
         self.enforce_time_exits(prices, now_ts)
-        self.process_trade_stack(gate_payloads, prices, nav_snapshot, caps)
+        self.process_trade_stack(gate_payloads, prices, nav_snapshot, notional_caps)
 
     def enforce_time_exits(self, prices: Dict[str, Any], now_ts: float) -> None:
         """Phase 9: The Enforcer (Background Time Exits)"""
@@ -422,9 +421,13 @@ class PortfolioLoopCoordinator:
         gate_payloads: Dict[str, Dict[str, Any]],
         prices: Dict[str, Any],
         nav_snapshot: Any,
-        caps: Any,
+        notional_caps: Any,
     ) -> None:
-        per_trade = caps.per_position_cap
+        # `target_units()` expects a scaled exposure budget, not raw gross notional.
+        # Convert the broker-aligned per-trade notional cap back into the runtime
+        # sizing basis so live `EXPOSURE_SCALE=1.0` yields true gross notional,
+        # while any smaller scale still preserves the same resulting unit size.
+        per_trade = float(notional_caps.per_position_cap or 0.0) * self.exposure_scale
 
         for instrument in self.enabled_instruments:
             self.trade_stack.process_instrument(

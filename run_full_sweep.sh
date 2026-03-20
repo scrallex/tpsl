@@ -37,12 +37,16 @@ CANONICAL_LIVE_PARAMS_PATH="${CANONICAL_LIVE_PARAMS_PATH:-config/live_params.jso
 EXPORT_PARAMS_PATH="${EXPORT_PARAMS_PATH:-}"
 EXPORT_END_TIME="${EXPORT_END_TIME:-}"
 REFERENCE_EXPORT_ROOT="${REFERENCE_EXPORT_ROOT:-output/LiveParams}"
+SWEEP_MODE="${SWEEP_MODE:-canonical}"
+VALIDATION_WINDOWS_STR="${VALIDATION_WINDOWS:-90 30 7}"
+SWEEP_WINDOWS_STR="${SWEEP_WINDOWS:-180 90 30 7}"
+RUN_END_TIME="${RUN_END_TIME:-}"
 
 INSTRUMENTS_STR="${INSTRUMENTS:-EUR_USD USD_CAD GBP_USD NZD_USD USD_CHF AUD_USD USD_JPY}"
-WINDOWS_STR="${SWEEP_WINDOWS:-90 30 7}"
 
 read -r -a INSTRUMENTS <<< "$INSTRUMENTS_STR"
-read -r -a WINDOWS <<< "$WINDOWS_STR"
+read -r -a VALIDATION_WINDOWS <<< "$VALIDATION_WINDOWS_STR"
+read -r -a SWEEP_WINDOWS <<< "$SWEEP_WINDOWS_STR"
 
 mkdir -p output/market_data output/ml_data output/models
 
@@ -62,6 +66,59 @@ run_logged_cmd() {
         return 0
     fi
     "$@" 2>&1 | tee "$log_file"
+}
+
+resolve_run_end_time() {
+    if [[ -n "$RUN_END_TIME" ]]; then
+        echo "$RUN_END_TIME"
+        return 0
+    fi
+    "$PYTHON_BIN" - <<'PY'
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
+PY
+}
+
+resolve_effective_end_time() {
+    if [[ -n "$RUN_END_TIME" && -n "$EXPORT_END_TIME" && "$RUN_END_TIME" != "$EXPORT_END_TIME" ]]; then
+        echo "RUN_END_TIME and EXPORT_END_TIME must match when both are set." >&2
+        exit 1
+    fi
+    if [[ -n "$RUN_END_TIME" ]]; then
+        echo "$RUN_END_TIME"
+        return 0
+    fi
+    if [[ -n "$EXPORT_END_TIME" ]]; then
+        echo "$EXPORT_END_TIME"
+        return 0
+    fi
+    resolve_run_end_time
+}
+
+unique_windows() {
+    local value
+    local -A seen=()
+    for value in "$@"; do
+        if [[ -z "$value" ]]; then
+            continue
+        fi
+        if [[ -z "${seen[$value]+x}" ]]; then
+            seen[$value]=1
+            echo "$value"
+        fi
+    done
+}
+
+ensure_params_file() {
+    local path="$1"
+    local label="$2"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        return 0
+    fi
+    if [[ ! -f "$path" ]]; then
+        echo "Missing ${label}: ${path}" >&2
+        exit 1
+    fi
 }
 
 needs_ml_rebuild() {
@@ -117,6 +174,7 @@ promote_canonical_params() {
 
 run_window_sweep() {
     local days="$1"
+    local end_time="${2:-}"
     local window_dir="output/${days}day"
     local params_rel="${days}day/live_params.json"
     local log_file="${window_dir}/sweep_${days}d.log"
@@ -140,6 +198,9 @@ run_window_sweep() {
         --max-trades "$MAX_TRADES"
         --output-file "$params_rel"
     )
+    if [[ -n "$end_time" ]]; then
+        optimizer_cmd+=(--end-time "$end_time")
+    fi
     if [[ "$USE_REGIME" == "1" ]]; then
         optimizer_cmd+=(--use-regime)
     fi
@@ -152,47 +213,13 @@ run_window_sweep() {
     run_logged_cmd "$log_file" "${optimizer_cmd[@]}"
 }
 
-require_window_params() {
-    local days="$1"
-    local params_file="output/${days}day/live_params.json"
-    if [[ -f "$params_file" ]]; then
-        return 0
-    fi
-    if [[ -n "$EXPORT_PARAMS_PATH" && -f "$EXPORT_PARAMS_PATH" ]]; then
-        return 0
-    fi
-    if [[ -z "$EXPORT_PARAMS_PATH" && -f "output/live_params.json" ]]; then
-        return 0
-    fi
-    echo "Missing params file for ${days}-day export: ${params_file}" >&2
-    echo "Run the sweep first or set EXPORT_PARAMS_PATH to a winner params JSON." >&2
-    exit 1
-}
-
-prepare_export_params() {
-    local days="$1"
-    local window_dir="output/${days}day"
-    local window_params="${window_dir}/live_params.json"
-    local source_params="${EXPORT_PARAMS_PATH:-output/live_params.json}"
-
-    mkdir -p "$window_dir"
-    if [[ -z "$EXPORT_PARAMS_PATH" && -f "$window_params" ]]; then
-        echo "$window_params"
-        return 0
-    fi
-    if [[ ! -f "$source_params" ]]; then
-        echo "Missing export params source: ${source_params}" >&2
-        exit 1
-    fi
-    echo "+ cp $source_params $window_params" >&2
-    if [[ "$DRY_RUN" != "1" ]]; then
-        cp "$source_params" "$window_params"
-    fi
-    echo "$window_params"
-}
-
 resolve_window_end_time() {
     local days="$1"
+    local requested_end_time="${2:-}"
+    if [[ -n "$requested_end_time" ]]; then
+        echo "$requested_end_time"
+        return 0
+    fi
     if [[ -n "$EXPORT_END_TIME" ]]; then
         echo "$EXPORT_END_TIME"
         return 0
@@ -219,21 +246,64 @@ PY
     return 1
 }
 
+resolve_export_params_for_window() {
+    local days="$1"
+    local explicit_source="${2:-}"
+    local window_params="output/${days}day/live_params.json"
+
+    if [[ -n "$explicit_source" ]]; then
+        echo "$explicit_source"
+        return 0
+    fi
+    if [[ -f "$window_params" ]]; then
+        echo "$window_params"
+        return 0
+    fi
+    if [[ -f "output/live_params.json" ]]; then
+        echo "output/live_params.json"
+        return 0
+    fi
+
+    echo "Missing params file for ${days}-day export." >&2
+    echo "Run the sweep first or set EXPORT_PARAMS_PATH/CANONICAL_PARAMS_PATH to a winner params JSON." >&2
+    exit 1
+}
+
+prepare_window_params() {
+    local days="$1"
+    local source_params="$2"
+    local window_dir="output/${days}day"
+    local window_params="${window_dir}/live_params.json"
+
+    mkdir -p "$window_dir"
+    ensure_params_file "$source_params" "export params source"
+
+    if [[ "$source_params" != "$window_params" ]]; then
+        echo "+ cp $source_params $window_params" >&2
+        if [[ "$DRY_RUN" != "1" ]]; then
+            cp "$source_params" "$window_params"
+        fi
+    fi
+    echo "$window_params"
+}
+
 export_window_trades() {
     local days="$1"
+    local source_params="${2:-}"
+    local requested_end_time="${3:-}"
     local window_dir="output/${days}day"
-    local params_file="${window_dir}/live_params.json"
+    local resolved_source=""
+    local params_file=""
     local end_time=""
 
     echo "=================================================="
     echo "Phase 2: Export ${days}-Day Trades"
     echo "=================================================="
 
-    if [[ "$EXPORT_ONLY" == "1" ]]; then
-        params_file="$(prepare_export_params "$days")"
-        if end_time="$(resolve_window_end_time "$days")"; then
-            echo "Using pinned export end time for ${days}-day window: ${end_time}"
-        fi
+    resolved_source="$(resolve_export_params_for_window "$days" "$source_params")"
+    params_file="$(prepare_window_params "$days" "$resolved_source")"
+    if end_time="$(resolve_window_end_time "$days" "$requested_end_time")"; then
+        echo "Using pinned export end time for ${days}-day window: ${end_time}"
     fi
 
     local export_cmd=(
@@ -326,7 +396,29 @@ audit_live_profile() {
         "${extra_args[@]}"
 }
 
-echo "Running sweep windows: ${WINDOWS[*]}"
+mapfile -t CANONICAL_EXPORT_WINDOWS < <(unique_windows "$CANONICAL_WINDOW" "${VALIDATION_WINDOWS[@]}")
+mapfile -t INDEPENDENT_WINDOWS < <(unique_windows "${SWEEP_WINDOWS[@]}")
+
+if [[ "$SWEEP_MODE" != "canonical" && "$SWEEP_MODE" != "independent" ]]; then
+    echo "Unsupported SWEEP_MODE: ${SWEEP_MODE}" >&2
+    exit 1
+fi
+if [[ "${#CANONICAL_EXPORT_WINDOWS[@]}" -eq 0 ]]; then
+    echo "No canonical export windows configured." >&2
+    exit 1
+fi
+if [[ "${#INDEPENDENT_WINDOWS[@]}" -eq 0 ]]; then
+    echo "No sweep windows configured." >&2
+    exit 1
+fi
+
+echo "Sweep mode: ${SWEEP_MODE}"
+if [[ "$SWEEP_MODE" == "canonical" ]]; then
+    echo "Canonical sweep window: ${CANONICAL_WINDOW}"
+    echo "Canonical export windows: ${CANONICAL_EXPORT_WINDOWS[*]}"
+else
+    echo "Independent sweep windows: ${INDEPENDENT_WINDOWS[*]}"
+fi
 echo "Instruments: ${INSTRUMENTS[*]}"
 echo "Signal type: ${SIGNAL_TYPE}"
 echo "Use regime filter: ${USE_REGIME}"
@@ -335,61 +427,72 @@ echo "Export only: ${EXPORT_ONLY}"
 echo "Validate windows only: ${VALIDATE_WINDOWS_ONLY}"
 echo "ML primary gate: ${ML_PRIMARY_GATE}"
 
-if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
-    if [[ -z "$CANONICAL_PARAMS_PATH" ]]; then
-        CANONICAL_PARAMS_PATH="output/${CANONICAL_WINDOW}day/live_params.json"
-    fi
-    if [[ ! -f "$CANONICAL_PARAMS_PATH" ]]; then
-        echo "Missing canonical params file for validation mode: ${CANONICAL_PARAMS_PATH}" >&2
-        exit 1
-    fi
-    EXPORT_ONLY=1
-    EXPORT_PARAMS_PATH="$CANONICAL_PARAMS_PATH"
-    if [[ -z "$EXPORT_END_TIME" ]]; then
-        EXPORT_END_TIME="$("$PYTHON_BIN" - <<'PY'
-from datetime import datetime, timezone
-print(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
-PY
-)"
-    fi
-    echo "Canonical params path: ${CANONICAL_PARAMS_PATH}"
-    echo "Pinned validation end time: ${EXPORT_END_TIME}"
+PINNED_END_TIME=""
+if [[ "$SWEEP_MODE" == "canonical" || "$EXPORT_ONLY" != "1" || -n "$RUN_END_TIME" || -n "$EXPORT_END_TIME" ]]; then
+    PINNED_END_TIME="$(resolve_effective_end_time)"
+    echo "Pinned run end time: ${PINNED_END_TIME}"
 fi
 
-if [[ "$EXPORT_ONLY" != "1" ]]; then
-    for days in "${WINDOWS[@]}"; do
-        run_window_sweep "$days"
+if [[ "$SWEEP_MODE" == "canonical" ]]; then
+    CANONICAL_SOURCE_PARAMS="${CANONICAL_PARAMS_PATH:-}"
+    if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
+        if [[ -z "$CANONICAL_SOURCE_PARAMS" ]]; then
+            CANONICAL_SOURCE_PARAMS="output/${CANONICAL_WINDOW}day/live_params.json"
+        fi
+        ensure_params_file "$CANONICAL_SOURCE_PARAMS" "canonical params file"
+        EXPORT_ONLY=1
+        echo "Skipping GPU optimization sweep; exporting canonical + validation windows from ${CANONICAL_SOURCE_PARAMS}."
+    elif [[ "$EXPORT_ONLY" == "1" ]]; then
+        if [[ -z "$CANONICAL_SOURCE_PARAMS" ]]; then
+            CANONICAL_SOURCE_PARAMS="${EXPORT_PARAMS_PATH:-output/${CANONICAL_WINDOW}day/live_params.json}"
+        fi
+        ensure_params_file "$CANONICAL_SOURCE_PARAMS" "canonical params file"
+        echo "Skipping GPU optimization sweep; exporting canonical + validation windows from ${CANONICAL_SOURCE_PARAMS}."
+    else
+        run_window_sweep "$CANONICAL_WINDOW" "$PINNED_END_TIME"
+        CANONICAL_SOURCE_PARAMS="output/${CANONICAL_WINDOW}day/live_params.json"
+    fi
+
+    if [[ "$USE_ML" == "1" ]] && needs_ml_rebuild; then
+        echo "=================================================="
+        echo "Phase 1.5: Build ML Features and Train Models"
+        echo "=================================================="
+        run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/tools/build_features.py --instruments "${INSTRUMENTS[@]}"
+        run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/research/ml_train.py --instruments "${INSTRUMENTS[@]}"
+    fi
+
+    for days in "${CANONICAL_EXPORT_WINDOWS[@]}"; do
+        export_window_trades "$days" "$CANONICAL_SOURCE_PARAMS" "$PINNED_END_TIME"
     done
+
+    promote_canonical_params "$CANONICAL_SOURCE_PARAMS"
 else
     if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
-        echo "Skipping GPU optimization sweep; exporting validation windows from canonical params."
+        echo "VALIDATE_WINDOWS_ONLY requires SWEEP_MODE=canonical." >&2
+        exit 1
+    fi
+
+    if [[ "$EXPORT_ONLY" != "1" ]]; then
+        for days in "${INDEPENDENT_WINDOWS[@]}"; do
+            run_window_sweep "$days" "$PINNED_END_TIME"
+        done
     else
         echo "Skipping GPU optimization sweep; exporting from existing window params."
     fi
-    if [[ -z "$EXPORT_PARAMS_PATH" && -f "output/live_params.json" ]]; then
-        EXPORT_PARAMS_PATH="output/live_params.json"
+
+    if [[ "$USE_ML" == "1" ]] && needs_ml_rebuild; then
+        echo "=================================================="
+        echo "Phase 1.5: Build ML Features and Train Models"
+        echo "=================================================="
+        run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/tools/build_features.py --instruments "${INSTRUMENTS[@]}"
+        run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/research/ml_train.py --instruments "${INSTRUMENTS[@]}"
     fi
-    for days in "${WINDOWS[@]}"; do
-        require_window_params "$days"
+
+    for days in "${INDEPENDENT_WINDOWS[@]}"; do
+        export_window_trades "$days" "${EXPORT_PARAMS_PATH:-}" "$PINNED_END_TIME"
     done
-fi
 
-if [[ "$USE_ML" == "1" ]] && needs_ml_rebuild; then
-    echo "=================================================="
-    echo "Phase 1.5: Build ML Features and Train Models"
-    echo "=================================================="
-    run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/tools/build_features.py --instruments "${INSTRUMENTS[@]}"
-    run_cmd env PYTHONPATH=. "$PYTHON_BIN" scripts/research/ml_train.py --instruments "${INSTRUMENTS[@]}"
-fi
-
-for days in "${WINDOWS[@]}"; do
-    export_window_trades "$days"
-done
-
-if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
-    promote_canonical_params "$EXPORT_PARAMS_PATH"
-else
-    restore_baseline_outputs "${WINDOWS[0]}"
+    restore_baseline_outputs "${INDEPENDENT_WINDOWS[0]}"
 fi
 
 if [[ "$GENERATE_LIVE_PROFILE" == "1" ]]; then
@@ -401,16 +504,21 @@ if [[ "$AUDIT_LIVE_PROFILE" == "1" ]]; then
 fi
 
 echo "=================================================="
-if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
-    echo "Canonical validation exports complete."
+if [[ "$SWEEP_MODE" == "canonical" ]]; then
+    if [[ "$VALIDATE_WINDOWS_ONLY" == "1" || "$EXPORT_ONLY" == "1" ]]; then
+        echo "Canonical export replay complete."
+    else
+        echo "Canonical sweep and validation export complete."
+    fi
 else
-    echo "Sweep and export complete."
+    echo "Independent sweep and export complete."
 fi
-echo "Window outputs are in: $(printf 'output/%sday ' "${WINDOWS[@]}")"
-if [[ "$VALIDATE_WINDOWS_ONLY" == "1" ]]; then
-    echo "Canonical output/live_params.json promoted from ${EXPORT_PARAMS_PATH}."
+if [[ "$SWEEP_MODE" == "canonical" ]]; then
+    echo "Window outputs are in: $(printf 'output/%sday ' "${CANONICAL_EXPORT_WINDOWS[@]}")"
+    echo "Canonical output/live_params.json promoted from ${CANONICAL_SOURCE_PARAMS}."
 else
-    echo "Baseline output/live_params.json restored from ${WINDOWS[0]}-day sweep."
+    echo "Window outputs are in: $(printf 'output/%sday ' "${INDEPENDENT_WINDOWS[@]}")"
+    echo "Baseline output/live_params.json restored from ${INDEPENDENT_WINDOWS[0]}-day sweep."
 fi
 if [[ "$GENERATE_LIVE_PROFILE" == "1" ]]; then
     echo "Live profile updated at: ${LIVE_PROFILE_PATH}"

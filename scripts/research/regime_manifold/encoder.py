@@ -168,6 +168,7 @@ class MarketManifoldEncoder:
         *,
         instrument: str,
         return_only_latest: bool = False,
+        align_latest_to_stride: bool = True,
     ) -> List[EncodedWindow]:
         if len(candles) < self.window_candles:
             return []
@@ -182,13 +183,17 @@ class MarketManifoldEncoder:
         volume_median = statistics.median(volume_values) if volume_values else 1.0
 
         windows: List[EncodedWindow] = []
-        
+
         start = 0
         if return_only_latest:
-            # We must only evaluate the very last full window possible
+            # Live services may want the most recent rolling window, while
+            # historical derivation can still snap to stride boundaries.
             max_start = len(candles) - self.window_candles
             if max_start >= 0:
-                start = (max_start // self.stride_candles) * self.stride_candles
+                if align_latest_to_stride:
+                    start = (max_start // self.stride_candles) * self.stride_candles
+                else:
+                    start = max_start
 
         while start + self.window_candles <= len(candles):
             end = start + self.window_candles

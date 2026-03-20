@@ -122,24 +122,39 @@ Refresh history:
 ```bash
 python3 scripts/research/data_store.py \
   --instruments EUR_USD GBP_USD USD_JPY AUD_USD USD_CHF USD_CAD NZD_USD \
-  --lookback-days 180
+  --lookback-days 190
 ```
 
-Run the optimizer:
+Run the canonical sweep workflow:
 
 ```bash
-python3 scripts/research/gpu_optimizer.py \
-  --instrument EUR_USD GBP_USD USD_JPY AUD_USD USD_CHF USD_CAD NZD_USD \
-  --signal-type mean_reversion \
-  --lookback-days 180 \
-  --max_combinations 15000 \
-  --refine \
-  --export-trades \
-  --min-trades 100 \
-  --max-trades 300
+export RUN_END_TIME="$(python3 - <<'PY'
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).replace(microsecond=0).isoformat())
+PY
+)"
+
+MAX_COMBINATIONS=15000 \
+MIN_TRADES=100 \
+MAX_TRADES=300 \
+REFINE_SWEEP=1 \
+./run_full_sweep.sh
 ```
 
-Project optimizer output into the live YAML:
+This runs a full `180`-day sweep, then replays `180`, `90`, `30`, and `7`
+days using the canonical `180`-day params with the same pinned end time.
+
+Re-export the validation windows from an existing canonical winner without
+re-sweeping:
+
+```bash
+RUN_END_TIME="$RUN_END_TIME" \
+EXPORT_ONLY=1 \
+CANONICAL_PARAMS_PATH=output/180day/live_params.json \
+./run_full_sweep.sh
+```
+
+Project the promoted output into the live YAML and verify parity:
 
 ```bash
 make strategy-yaml
@@ -164,6 +179,8 @@ Promote the winner over the webhook:
 ```bash
 make push-config TARGET=http://127.0.0.1:8000/api/strategy/update
 ```
+
+Operator runbook: [runbooks/gpu_canonical_sweep.md](/sep/tpsl/runbooks/gpu_canonical_sweep.md)
 
 ## Deployment
 

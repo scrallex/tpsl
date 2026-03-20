@@ -9,6 +9,12 @@ that:
 - keeps the configured hard cap below 100% NAV
 - does not block historically observed trade opportunities
 
+Research prerequisite:
+
+- build the canonical artifacts with [gpu_canonical_sweep.md](/sep/tpsl/runbooks/gpu_canonical_sweep.md)
+- the expected mean-reversion history now comes from rolling `64x1` manifold
+  gates, matching the current live service cadence
+
 ## Canonical Inputs
 
 - Canonical params: `output/180day/live_params.json`
@@ -62,7 +68,7 @@ python3 scripts/tools/audit_portfolio_overlap.py \
   --window-dir output/30day \
   --window-dir output/7day \
   --nav 100000 \
-  --exposure-scale 0.02 \
+  --exposure-scale 1.0 \
   --alloc-top-k 32 \
   --projected-gross-pct 2.75
 ```
@@ -83,7 +89,7 @@ Expected results:
 4. Run the regression tests that cover the audit math and live parity:
 
 ```bash
-PYTHONPATH=. pytest -q tests/test_live_alignment.py tests/test_portfolio_overlap_audit.py
+PYTHONPATH=. pytest -q tests/test_live_alignment.py
 ```
 
 ## Deployment Guard

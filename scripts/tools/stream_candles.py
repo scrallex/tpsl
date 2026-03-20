@@ -130,9 +130,12 @@ def _window_count_for_instrument(
     granularity: str,
     bootstrap_count: int,
     incremental_count: int,
+    cached_count: Optional[int] = None,
 ) -> int:
     bootstrap_window = max(5, bootstrap_count)
     incremental_window = max(5, incremental_count)
+    if cached_count is not None and int(cached_count) < bootstrap_window:
+        return bootstrap_window
     if last_written_ts_ms is None:
         return bootstrap_window
 
@@ -227,12 +230,14 @@ def _fetch_instrument_candles(
     bootstrap_count: int,
     incremental_count: int,
     last_written_ts_ms: Optional[int],
+    cached_count: Optional[int],
 ) -> tuple[str, Sequence[Dict[str, object]], OandaConnector, int]:
     window_count = _window_count_for_instrument(
         last_written_ts_ms=last_written_ts_ms,
         granularity=granularity,
         bootstrap_count=bootstrap_count,
         incremental_count=incremental_count,
+        cached_count=cached_count,
     )
     candles = connector.get_candles(
         instrument,
@@ -303,6 +308,21 @@ def stream_candles(
     try:
         while not stop_event.is_set():
             started = time.time()
+            cached_counts: Dict[str, int] = {}
+            count_pipe = client.pipeline()
+            for instrument in instruments:
+                count_pipe.zcard(f"md:candles:{instrument}:{granularity}")
+            try:
+                raw_counts = count_pipe.execute()
+            except redis.RedisError as exc:  # pragma: no cover - redis issues
+                print(f"[stream] redis zcard failed: {exc}", flush=True)
+                raw_counts = [0] * len(instruments)
+            for instrument, raw_count in zip(instruments, raw_counts):
+                try:
+                    cached_counts[instrument] = int(raw_count or 0)
+                except (TypeError, ValueError):
+                    cached_counts[instrument] = 0
+
             futures = {
                 executor.submit(
                     _fetch_instrument_candles,
@@ -313,6 +333,7 @@ def stream_candles(
                     bootstrap_count=recent_count,
                     incremental_count=incremental_count,
                     last_written_ts_ms=last_written_ts_ms.get(instrument),
+                    cached_count=cached_counts.get(instrument),
                 ): instrument
                 for instrument in instruments
             }

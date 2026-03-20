@@ -23,6 +23,13 @@ if __name__ == "__main__":
         level=logging.INFO, format="%(asctime)s %(levelname)s :: %(message)s"
     )
     import argparse
+    from datetime import timedelta
+
+    def parse_iso8601(value: str) -> datetime:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument", nargs="+", default=["EUR_USD"])
@@ -54,11 +61,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Automatically run full simulator export on the best parameters.",
     )
+    parser.add_argument(
+        "--end-time",
+        type=parse_iso8601,
+        help="Optional UTC end time for a reproducible sweep window (ISO-8601).",
+    )
     args = parser.parse_args()
 
-    from datetime import timedelta
-
-    end_dt = datetime.now(timezone.utc).replace(microsecond=0)
+    end_dt = args.end_time or datetime.now(timezone.utc).replace(microsecond=0)
     start_dt = end_dt - timedelta(days=args.lookback_days)
 
     instruments = (

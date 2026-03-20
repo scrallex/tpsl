@@ -2,6 +2,7 @@
 """Risk calculation and sizing (Pure Mathematics)."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -24,10 +25,30 @@ class RiskSizer:
         nav_risk_pct: float,
         per_position_pct_cap: float,
         alloc_top_k: int,
+        broker_account_leverage: Optional[float] = None,
+        max_margin_utilization: Optional[float] = None,
     ) -> None:
         self._nav_risk_pct = max(0.0, min(1.0, float(nav_risk_pct)))
         self._per_position_pct_cap = max(0.0, min(1.0, float(per_position_pct_cap)))
         self._alloc_top_k = max(1, int(alloc_top_k))
+        leverage_default = broker_account_leverage
+        if leverage_default is None:
+            leverage_default = float(
+                os.getenv(
+                    "BROKER_ACCOUNT_LEVERAGE",
+                    os.getenv("OANDA_MAX_LEVERAGE", "50"),
+                )
+                or 50.0
+            )
+        utilization_default = max_margin_utilization
+        if utilization_default is None:
+            utilization_default = float(
+                os.getenv("PORTFOLIO_MARGIN_UTILIZATION_CAP", "0.70") or 0.70
+            )
+        self._broker_account_leverage = max(0.0, float(leverage_default))
+        self._max_margin_utilization = max(
+            0.0, min(1.0, float(utilization_default))
+        )
 
     def compute_caps(self, nav_snapshot: float) -> RiskSizerCaps:
         nav = max(0.0, float(nav_snapshot or 0.0))
@@ -45,20 +66,37 @@ class RiskSizer:
     def compute_notional_caps(
         self, nav_snapshot: float, *, exposure_scale: float
     ) -> RiskSizerCaps:
-        """Translate scalar exposure caps into gross-notional limits.
+        """Translate scalar budgets into broker-aligned gross-notional limits.
 
-        The live risk manager tracks gross USD notional, while the sizing path
-        budgets exposure using `exposure_scale`. Align the two by converting the
-        scalar caps back into gross notional.
+        The live risk manager tracks gross USD notional, so the portfolio cap
+        should be based on available broker buying power rather than the
+        research-time sizing scalar. By default we assume OANDA's 50:1 major FX
+        leverage and allow 70% utilization of that buying power.
         """
         caps = self.compute_caps(nav_snapshot)
-        scale = float(exposure_scale or 0.0)
-        if scale <= 0:
-            return caps
+        nav = max(0.0, float(nav_snapshot or 0.0))
+        leverage = float(self._broker_account_leverage or 0.0)
+        utilization = float(self._max_margin_utilization or 0.0)
+
+        if nav <= 0.0 or leverage <= 0.0 or utilization <= 0.0:
+            scale = float(exposure_scale or 0.0)
+            if scale <= 0:
+                return caps
+            return RiskSizerCaps(
+                nav_risk_cap=caps.nav_risk_cap / scale,
+                per_position_cap=caps.per_position_cap / scale,
+                portfolio_cap=caps.portfolio_cap / scale,
+            )
+
+        gross_buying_power = nav * leverage
+        per_position_cap = caps.per_position_cap
+        if self._per_position_pct_cap > 0:
+            per_position_cap = gross_buying_power * self._per_position_pct_cap
+
         return RiskSizerCaps(
-            nav_risk_cap=caps.nav_risk_cap / scale,
-            per_position_cap=caps.per_position_cap / scale,
-            portfolio_cap=caps.portfolio_cap / scale,
+            nav_risk_cap=caps.nav_risk_cap,
+            per_position_cap=per_position_cap,
+            portfolio_cap=gross_buying_power * utilization,
         )
 
     def target_units(

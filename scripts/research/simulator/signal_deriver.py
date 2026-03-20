@@ -353,7 +353,7 @@ def derive_regime_manifold_gates(
     granularity: str = "S5",
     cache_path: Optional[Path] = None,
     window_candles: int = 64,
-    stride_candles: int = 16,
+    stride_candles: int = 1,
     atr_period: int = 14,
     hazard_percentile: float = 0.8,
     signature_retention_minutes: int = 60,
@@ -362,7 +362,7 @@ def derive_regime_manifold_gates(
     lambda_scale: float = 0.1,
     hazard_cap: Optional[float] = 1.0,
 ) -> List[Dict[str, Any]]:
-    """Derive dense historical gates that mirror the live regime service."""
+    """Derive dense historical gates that mirror the live rolling regime service."""
 
     start_dt = parse_utc_time(start)
     end_dt = parse_utc_time(end)
